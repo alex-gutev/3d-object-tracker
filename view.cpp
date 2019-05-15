@@ -45,6 +45,19 @@ bool view::read() {
     return true;
 }
 
+
+cv::Vec4f view::to_camera_space(float x, float y, float z) {
+    // Reverse Perspective Projection
+    cv::Vec4f p(x * z, y * z, z, 1);
+
+    // Transform to camera space
+    return inv_intrinsic_matrix() * p;
+}
+
+cv::Vec4f view::to_pixel_space(cv::Vec4f p) {
+    return intrinsic_matrix() * p;
+}
+
 cv::Point view::transform(cv::Point coord, const view &next_view) {
     // Get depth map intensity value of pixel
     uchar disparity = depth_frame.at<uchar>(coord);
@@ -67,6 +80,7 @@ cv::Point3f view::transform(cv::Point px, float depth, const view &next_view) {
 
     return cv::Point3f(pt[0]/pt[2], color_frame.rows - pt[1]/pt[2], pt[2]);
 }
+
 
 float view::disparity_to_depth(uchar disparity) {
     return 1.0f / ((disparity/255.0f)*(1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);

@@ -171,9 +171,6 @@ void tracker_app::tracking_loop() {
         // function, 5 milliseconds is chosen.
         cv::waitKey(5);
     }
-
-    // Print execution time statistics
-    track.print_time_stats();
 }
 
 

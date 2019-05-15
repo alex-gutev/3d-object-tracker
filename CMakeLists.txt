@@ -25,6 +25,19 @@ if(PARALLEL)
     add_definitions(-DFYP_TRACKER_PARALLEL)
 endif()
 
-add_executable(tracker main.cpp yuv_reader.cpp yuv_reader.h tracker_app.cpp tracker_app.h tracker.cpp tracker.h view.cpp view.h view_parser.cpp view_parser.h)
-target_link_libraries(tracker ${OpenCV_LIBS})
+add_executable(tracker
+  main.cpp
+  yuv_reader.cpp
+  yuv_reader.h
+  tracker_app.cpp
+  tracker_app.h
+  tracker.cpp
+  tracker.h
+  view_tracker.h
+  view_tracker.cpp
+  view.cpp
+  view.h
+  view_parser.cpp
+  view_parser.h)
 
+target_link_libraries(tracker ${OpenCV_LIBS})

@@ -223,6 +223,36 @@ public:
     float disparity_to_depth(uchar disparity);
 
     /**
+     * Transforms a point, on the view's frame image, to the view's
+     * camera space.
+     *
+     * @param x X coordinate.
+     * @param y Y coordinate.
+     * @param z Z coordinate.
+     *
+     * @return The point in camera space.
+     */
+    cv::Vec4f to_camera_space(float x, float y, float z);
+    /**
+     * Transforms a point, on the view's frame image, to world space.
+     *
+     * @param p The point.
+     *
+     * @return The point in world space.
+     */
+    cv::Point3f to_world_space(cv::Point p);
+
+    /**
+     * Transforms a point from camera space to pixel space.
+     *
+     * @param p The camera space point.
+     *
+     * @return The pixel space point.
+     */
+    cv::Vec4f to_pixel_space(cv::Vec4f p);
+
+
+    /**
      * Transforms the coordinates, of a pixel in the view, to the
      * coordinates of the pixel's position in another view's image.
      *

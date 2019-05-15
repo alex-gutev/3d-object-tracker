@@ -24,7 +24,7 @@
 
 #include <opencv2/imgproc.hpp>
 
-#include "view.h"
+#include "view_tracker.h"
 
 /**
  * Performs object detection and tracking in multi-view content.
@@ -47,22 +47,9 @@ class tracker {
     typedef std::vector<contour_type> contours_type;
 
     /**
-     * Average per-frame execution of the tracking algorithm.
-     *
-     * The array stores the execution times of the tracker in each
-     * view.
+     * Array of trackers for each view.
      */
-    std::vector<int> times;
-
-    /**
-     * Number of frames processed
-     */
-    int frames = 0;
-
-    /**
-     * Array of view objects.
-     */
-    std::vector<view> views;
+    std::vector<view_tracker> trackers;
 
     /**
      * Array of binary mask images, corresponding to the regions which
@@ -75,38 +62,11 @@ class tracker {
     std::vector<cv::Mat> m_masks;
 
     /**
-     * Array of colour histograms. Each view has a colour histogram of
-     * the pixels belonging to the object (within the view's mask).
-     */
-    std::vector<cv::Mat> m_hists;
-
-
-    /**
-     * Kernel bandwidth
-     */
-    double bandwidth;
-
-    /**
-     * The depth range of the object. Computed in the same frame in
-     * which object detection is performed
-     */
-    double z_range;
-
-    /**
      * The primary view in which tracking is performed.  The position
      * obtained in this view is used to infer the starting position,
      * of the mean shift tracker, in the other views.
      */
     int track_view;
-
-    /**
-     * Array of the tracking window rectangles of each view.
-     */
-    std::vector<cv::Rect> window;
-    /**
-     * Array of the Z positions of the tracking windows of each view.
-     */
-    std::vector<float> window_z;
 
 
     /** Object detection */
@@ -144,63 +104,6 @@ class tracker {
      * @param dest              The destination view.
      */
     void map_contour(const contour_type &in_contour, contour_type &out_contour, view &src, view &dest);
-
-
-    /** Tracking */
-
-    /**
-     * Performs 3D Mean Shift in the point-cloud space of view @a v's
-     * colour frame image projected into 3D space using the disparity
-     * image.
-     *
-     * Mean shift is performed in the point-cloud to find the centre
-     * of the closest region (based on the 3D Euclidean Distance) with
-     * pixel colours which have a high probability of belonging to the
-     * object based on the object's colour histogram. The pixel
-     * probabilities are provided by @a prob_img.
-     *
-     * A Gaussian kernel, with bandwidth parameter @a h, is used.
-     *
-     * @param prob_img      The probability image, a single channel image where the value
-     *                      of each pixel is the probability that the pixel belongs to the
-     *                      object.
-     *
-     * @param v             The view in which tracking is to be performed.
-     *
-     * @param window        The tracking window (the centre will be used as the starting position).
-     *
-     * @param depth         The depth of the centre of the tracking window.
-     *
-     * @param num_iters     Number of iterations to perform before stopping.
-     *
-     * @param epsilon       The minimum shift (between the new and old positions) to be considered significant.
-     *                      If the shift is below this values the loop is terminated before num_iters iterations
-     *                      are performed. The shift is in the unit of the 3D Euclidean distance.
-     *
-     * @param h             Gaussian kernel bandwidth.
-     *
-     * @return A pair where the first value is the new tracking window
-     *         (the centre of which is the object's new position) and
-     *         the second value is the depth of the object.
-     */
-    static std::pair<cv::Rect, float> mean_shift(cv::Mat prob_img, view &v, cv::Rect window, float depth, int num_iters,
-                                                 float epsilon,
-                                                 float h);
-
-
-    /**
-     * Prints the position of the top-left corner of the view's
-     * tracking window.
-     *
-     * @param view  Index of the view.
-     */
-    void print_position(int view) const;
-
-    /**
-     * Prints the position and size of the tracking windows of each
-     * view.
-     */
-    void print_windows() const;
 
 public:
 
@@ -267,19 +170,6 @@ public:
     void track(size_t index);
 
 
-    /**
-     * Backprojects a view's colour histogram onto the view's colour
-     * frame image.
-     *
-     * @param index The index of the view.
-     *
-     * @return A single-channel probability image in which each
-     *         pixel's value is the probability that it belongs to the
-     *         object.
-     */
-    cv::Mat backproject(size_t index);
-
-
     /** IO and Initialization */
 
     /**
@@ -309,7 +199,7 @@ public:
      * @return Reference to the view object.
      */
     view &get_view(size_t index) {
-        return views[index];
+        return trackers.at(index).view_info();
     }
 
     /**
@@ -319,7 +209,7 @@ public:
      * @return The frame image.
      */
     cv::Mat color(size_t view) {
-        return views.at(view).color();
+        return get_view(view).color();
     }
 
     /**
@@ -329,7 +219,7 @@ public:
      * @return The frame image.
      */
     cv::Mat depth(size_t view) {
-        return views.at(view).depth();
+        return get_view(view).depth();
     }
 
     /**
@@ -352,7 +242,7 @@ public:
      * @return  The tracking window rectangle.
      */
     cv::Rect track_window(int i) const {
-        return window[i];
+        return trackers[i].window();
     }
 
     /**
@@ -365,14 +255,8 @@ public:
      * @param bounds    The new tracking window rectangle.
      */
     void track_window(int i, const cv::Rect &bounds) {
-        window[i] = bounds;
+        trackers[i].window(bounds);
     }
-
-    /**
-     * Prints the average per frame execution times of the tracker in
-     * each view.
-     */
-    void print_time_stats();
 };
 
 
