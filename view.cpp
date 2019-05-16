@@ -46,7 +46,7 @@ bool view::read() {
 }
 
 
-cv::Vec4f view::to_camera_space(float x, float y, float z) {
+cv::Vec4f view::pixel_to_camera(float x, float y, float z) {
     // Reverse Perspective Projection
     cv::Vec4f p(x * z, y * z, z, 1);
 
@@ -54,9 +54,25 @@ cv::Vec4f view::to_camera_space(float x, float y, float z) {
     return inv_intrinsic_matrix() * p;
 }
 
-cv::Vec4f view::to_pixel_space(cv::Vec4f p) {
-    return intrinsic_matrix() * p;
+cv::Vec4f view::pixel_to_world(float x, float y, float z) {
+    // Transform to camera space
+
+    return inv_extrinsic_matrix() * pixel_to_camera(x, y, z);
 }
+
+cv::Vec4f view::camera_to_pixel(cv::Vec4f p) {
+    cv::Vec4f pt = intrinsic_matrix() * p;
+
+    pt[0] /= pt[2];
+    pt[1] /= pt[2];
+
+    return pt;
+}
+
+cv::Vec4f view::world_to_pixel(cv::Vec4f p) {
+    return camera_to_pixel(extrinsic_matrix() * p);
+}
+
 
 cv::Point view::transform(cv::Point coord, const view &next_view) {
     // Get depth map intensity value of pixel

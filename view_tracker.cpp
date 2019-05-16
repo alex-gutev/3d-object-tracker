@@ -173,7 +173,7 @@ static float magnitude(cv::Point3f pt) {
 
 std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::Rect window, float depth, int num_iters, float eps, float h) {
     // Convert object position (center of tracking window) to camera space
-    cv::Vec4f pos = v.to_camera_space(window.x + window.width / 2, window.y + window.height / 2, depth);
+    cv::Vec4f pos = v.pixel_to_camera(window.x + window.width / 2, window.y + window.height / 2, depth);
 
     while (num_iters--) {
         // Sum of weights
@@ -216,7 +216,7 @@ std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::R
                 float z = v.disparity_to_depth(depth_row[x]);
 
                 // Transform center of tracking window to camera space
-                cv::Vec4f pt = v.to_camera_space(x, y, z);
+                cv::Vec4f pt = v.pixel_to_camera(x, y, z);
 
                 // Compute 3D Euclidean distance
                 float dist = magnitude(cv::Point3f(pos[0] - pt[0], pos[1] - pt[1], pos[2] - pt[2]));
@@ -257,15 +257,15 @@ std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::R
             pos = new_pos;
 
             // Convert to pixel space
-            cv::Vec4f centre = v.to_pixel_space(pos);
+            cv::Vec4f centre = v.camera_to_pixel(pos);
 
             // Compute perspective projection to to obtain the
             // coordinates of the pixel at which the tracking window's
             // centre is located. Shift tracking window's centre to
             // the new centre.
 
-            window.x = centre[0]/centre[2] - window.width / 2;
-            window.y = centre[1]/centre[2] - window.height / 2;
+            window.x = centre[0] - window.width / 2;
+            window.y = centre[1] - window.height / 2;
 
             // Terminate loop if shift is less than the minimum
             if (distance < eps) break;

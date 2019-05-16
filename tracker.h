@@ -23,6 +23,7 @@
 #include <chrono>
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/video.hpp>
 
 #include "view_tracker.h"
 
@@ -68,6 +69,14 @@ class tracker {
      */
     int track_view;
 
+    /**
+     * Kalman filter with six state variables:
+     *
+     * position: x,y,z
+     * velocity: vx, vy, vz
+     */
+    cv::KalmanFilter kmfilter{6, 6};
+
 
     /** Object detection */
 
@@ -104,6 +113,59 @@ class tracker {
      * @param dest              The destination view.
      */
     void map_contour(const contour_type &in_contour, contour_type &out_contour, view &src, view &dest);
+
+
+    /* Kalman Filtering */
+
+    /**
+     * Initialize Kalman Filter Matrices.
+     */
+    void init_kalman_filter();
+
+    /**
+     * Set initial Kalman Filter state.
+     *
+     * @param x X position.
+     * @param y Y position.
+     * @param z Z position.
+     */
+    void init_kalman_state(float x, float y, float z);
+
+    /**
+     * Predict object position using Kalman Filter.
+     */
+    cv::Mat kalman_predict();
+
+    /**
+     * Correct Kalman Filter state using the position of the tracking window
+     * in view @a view, as a measurement.
+     *
+     * @param view The view whose tracking window to use as a
+     * measurement.
+     */
+    cv::Mat kalman_correct(int view);
+
+    /**
+     * Correct Kalman Filter state using measured object position.
+     *
+     * @param x X position.
+     * @param y Y position.
+     * @param z Z position.
+     */
+    cv::Mat kalman_correct(float x, float y, float z);
+
+    /**
+     * Update the position of all tracking windows to the current
+     * position of the Kalman Filter.
+     */
+    void update_windows();
+    /**
+     * Update the position of the tracking window in view @a view.
+     *
+     * @param view The view whose tracking window to update.
+     * @param pos The new centre of the tracking window.
+     */
+    void update_window(int view, cv::Vec4f pos);
 
 public:
 

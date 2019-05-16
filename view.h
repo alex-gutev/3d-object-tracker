@@ -232,7 +232,7 @@ public:
      *
      * @return The point in camera space.
      */
-    cv::Vec4f to_camera_space(float x, float y, float z);
+    cv::Vec4f pixel_to_camera(float x, float y, float z);
     /**
      * Transforms a point, on the view's frame image, to world space.
      *
@@ -240,7 +240,7 @@ public:
      *
      * @return The point in world space.
      */
-    cv::Point3f to_world_space(cv::Point p);
+    cv::Vec4f pixel_to_world(float x, float y, float z);
 
     /**
      * Transforms a point from camera space to pixel space.
@@ -249,7 +249,16 @@ public:
      *
      * @return The pixel space point.
      */
-    cv::Vec4f to_pixel_space(cv::Vec4f p);
+    cv::Vec4f camera_to_pixel(cv::Vec4f p);
+
+    /**
+     * Transforms a point from world space to pixel space.
+     *
+     * @param p The world space point.
+     *
+     * @return The pixel space point.
+     */
+    cv::Vec4f world_to_pixel(cv::Vec4f p);
 
 
     /**

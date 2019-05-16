@@ -157,6 +157,91 @@ void tracker::map_contour(const contour_type &in_contour, contour_type &out_cont
 }
 
 
+/// Kalman Filtering
+
+void tracker::init_kalman_filter() {
+    // Initialize Transition Matrix
+
+    kmfilter.transitionMatrix = cv::Mat::eye(6, 6, CV_32F);
+    kmfilter.transitionMatrix.at<float>(0,3) = 1;
+    kmfilter.transitionMatrix.at<float>(1,4) = 1;
+    kmfilter.transitionMatrix.at<float>(2,5) = 1;
+
+    // Initialize Measurement Matrix
+
+    kmfilter.measurementMatrix = cv::Mat::eye(6, 6, CV_32F);
+
+    // Initialize Process and Measurement Noise Covariance Matrices
+
+    kmfilter.processNoiseCov = 1e-5 * cv::Mat::eye(6, 6, CV_32F);
+    kmfilter.measurementNoiseCov = 1e-10 * cv::Mat::eye(6, 6, CV_32F);
+}
+
+void tracker::init_kalman_state(float x, float y, float z) {
+    kmfilter.statePost = cv::Mat(6, 1, CV_32F);
+    cv::randu(kmfilter.statePost, 0, 1);
+
+    kmfilter.statePost.at<float>(0) = x;
+    kmfilter.statePost.at<float>(1) = y;
+    kmfilter.statePost.at<float>(2) = z;
+
+    kmfilter.errorCovPost = 0.1 * cv::Mat::eye(6, 6, CV_32F);
+}
+
+cv::Mat tracker::kalman_predict() {
+    return kmfilter.predict();
+}
+
+cv::Mat tracker::kalman_correct(int view) {
+    auto &tracker = trackers[view];
+    cv::Rect r = tracker.window();
+    float z = tracker.window_z();
+
+    cv::Vec4f c = tracker.view_info().pixel_to_world(r.x + r.width/2, r.y + r.height/2, z);
+
+    return kalman_correct(c[0], c[1], c[2]);
+}
+
+cv::Mat tracker::kalman_correct(float x, float y, float z) {
+    cv::Mat m(6, 1, CV_32F);
+
+    m.at<float>(0) = x;
+    m.at<float>(1) = y;
+    m.at<float>(2) = z;
+
+    m.at<float>(3) = x - kmfilter.statePost.at<float>(0);
+    m.at<float>(4) = y - kmfilter.statePost.at<float>(1);
+    m.at<float>(5) = z - kmfilter.statePost.at<float>(2);
+
+    return kmfilter.correct(m);
+}
+
+
+void tracker::update_windows() {
+    cv::Vec4f pos({kmfilter.statePost.at<float>(0),
+                   kmfilter.statePost.at<float>(1),
+                   kmfilter.statePost.at<float>(2),
+                   1});
+
+    for (size_t i = 0; i < trackers.size(); ++i) {
+        update_window(i, pos);
+    }
+
+}
+
+void tracker::update_window(int view, cv::Vec4f pos) {
+    auto &tracker = trackers[view];
+    auto c = tracker.view_info().world_to_pixel(pos);
+
+    cv::Rect w = tracker.window();
+
+    w.x = c[0];
+    w.y = c[1];
+
+    tracker.window(w);
+    tracker.window_z(c[2]);
+}
+
 /// Colour Histogram
 
 void tracker::build_models() {
@@ -171,6 +256,14 @@ void tracker::estimate_bandwidth() {
     for (auto &tracker : trackers) {
         tracker.estimate_bandwidth();
     }
+
+    init_kalman_filter();
+
+    auto &tracker = trackers[track_view];
+    auto r = tracker.window();
+    auto p = tracker.view_info().pixel_to_world(r.x + r.width/2, r.y + r.height/2, tracker.window_z());
+
+    init_kalman_state(p[0], p[1], p[2]);
 }
 
 
@@ -182,6 +275,8 @@ void tracker::track() {
         track(i);
     }
 #else
+    kalman_predict();
+
     // Track object in primary view
     track(track_view);
 
@@ -219,9 +314,12 @@ void tracker::track() {
             track(i);
         }
     }
+
+    update_windows();
 #endif
 }
 
 void tracker::track(size_t index) {
     trackers[index].track();
+    auto p = kalman_correct(index);
 }
