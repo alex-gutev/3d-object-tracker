@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.5)
 project(3dtracker)
 
 find_package(OpenCV REQUIRED)
