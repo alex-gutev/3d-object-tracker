@@ -178,8 +178,8 @@ void tracker::init_kalman_filter() {
 }
 
 void tracker::init_kalman_state(float x, float y, float z) {
-    kmfilter.statePost = cv::Mat(6, 1, CV_32F);
-    cv::randu(kmfilter.statePost, 0, 1);
+    kmfilter.statePost = cv::Mat::zeros(6, 1, CV_32F);
+    std::cout << kmfilter.statePost;
 
     kmfilter.statePost.at<float>(0) = x;
     kmfilter.statePost.at<float>(1) = y;
@@ -235,8 +235,8 @@ void tracker::update_window(int view, cv::Vec4f pos) {
 
     cv::Rect w = tracker.window();
 
-    w.x = c[0];
-    w.y = c[1];
+    w.x = c[0] - w.width/2;
+    w.y = c[1] - w.height/2;
 
     tracker.window(w);
     tracker.window_z(c[2]);
