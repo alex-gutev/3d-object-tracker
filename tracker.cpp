@@ -179,7 +179,6 @@ void tracker::init_kalman_filter() {
 
 void tracker::init_kalman_state(float x, float y, float z) {
     kmfilter.statePost = cv::Mat::zeros(6, 1, CV_32F);
-    std::cout << kmfilter.statePost;
 
     kmfilter.statePost.at<float>(0) = x;
     kmfilter.statePost.at<float>(1) = y;
