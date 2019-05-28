@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  Alexander Gutev <alex.gutev@gmail.com>
+ * Copyright (C) 2018-2019  Alexander Gutev <alex.gutev@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -276,42 +276,8 @@ void tracker::track() {
 #else
     kalman_predict();
 
-    // Track object in primary view
-    track(track_view);
-
-    // Primary view's tracking window
-    cv::Rect rect = trackers[track_view].window();
-
-    // Position of object in primary view
-    cv::Point pos(rect.x + rect.width/2, rect.y + rect.height/2);
-
-    // Z-coordinate of object's position in primary view
-    float depth = trackers[track_view].window_z();
-
-    view &primary_view = get_view(track_view);
-
-    // For each of the remaining views
-    for (int i = 0; i < trackers.size(); i++) {
-        if (i != track_view) {
-            auto &tracker = trackers[i];
-
-            // Map object's position in primary view to this view
-            cv::Point3f new_pos = primary_view.transform(pos, depth, get_view(i));
-
-            // Shift z-coordinate of window
-            tracker.window_z(new_pos.z);
-
-            cv::Rect rect = tracker.window();
-
-            // Shift view's tracking to be centred at the mapped object position
-            rect.x = new_pos.x - rect.width / 2;
-            rect.y = new_pos.y - rect.height / 2;
-
-            tracker.window(rect);
-
-            // Track the object in this view
-            track(i);
-        }
+    for (size_t i = 0; i < trackers.size(); ++i) {
+        track(i);
     }
 
     update_windows();
