@@ -223,6 +223,17 @@ public:
     float disparity_to_depth(uchar disparity);
 
     /**
+     * Converts the depth intensity values to the actual z-coordinate
+     * values, of each pixel in the depth image @a img.
+     *
+     * @param img A depth map image.
+     *
+     * @return The image with the depth intensity values transformed
+     *    to z-coordinates
+     */
+    cv::Mat disparity_to_depth(cv::Mat img);
+
+    /**
      * Transforms a point, on the view's frame image, to the view's
      * camera space.
      *

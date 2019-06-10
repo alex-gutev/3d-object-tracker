@@ -86,10 +86,19 @@ void view_tracker::build_model(cv::Mat mask) {
     // Get reference to mask image within window
     cv::Mat depth = m_view.depth()(m_window);
 
+    cv::medianBlur(m_view.depth()(m_window), depth, 3);
+
     cv::Mat submask = mask(m_window);
 
-    z_range = (m_view.disparity_to_depth(percentile(depth, 0.66, submask)) -
-               m_view.disparity_to_depth(percentile(depth, 0.33, submask))) / 2;
+    double min, max;
+
+    cv::minMaxLoc(depth, &min, &max, nullptr, nullptr, submask);
+
+    min = m_view.disparity_to_depth(min);
+    max = m_view.disparity_to_depth(max);
+
+    z_range = (min - max) / 2;
+
 }
 
 void view_tracker::estimate_bandwidth() {
@@ -110,20 +119,45 @@ void view_tracker::estimate_bandwidth() {
     float dist = cv::norm(p1 - p2);
 
     // Compute bandwidth = median of distance and depth-range
-    bandwidth = (dist + std::abs(z_range)) / 2;
+    h = (dist + std::abs(z_range)) / 2;
 }
 
-void view_tracker::track() {
+void view_tracker::bandwidth(float value) {
+    h = value;
+}
+
+float view_tracker::track() {
     // Backproject histogram onto colour image
     cv::Mat pimg = backproject();
 
 #ifdef FYP_TRACKER_2D
     // Perform 2D mean shift
     cv::meanShift(pimg, window, cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 10, 1));
+    return 0;
+
 #else
+
+    float weight = compute_area_covered();
+
     // Perform 3D mean-shift
-    std::tie(m_window, m_window_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, bandwidth);
+    std::tie(m_window, m_window_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
+
+    return weight;
 #endif
+}
+
+float view_tracker::compute_area_covered() {
+    auto size = m_view.depth().size();
+    cv::Rect r(std::min(std::max(0, m_window.x - m_window.width/2), size.width - m_window.width*2),
+               std::min(std::max(0, m_window.y - m_window.height/2), size.height - m_window.height*2),
+               m_window.width*2, m_window.height*2);
+
+    cv::Mat img = m_view.disparity_to_depth(m_view.depth()(r));
+
+//    cv::threshold(img, img, m_window_z - z_range, 1, cv::THRESH_TOZERO);
+    cv::threshold(img, img, m_window_z + z_range, 1, cv::THRESH_TOZERO_INV);
+
+    return cv::countNonZero(img);
 }
 
 cv::Mat view_tracker::backproject() {

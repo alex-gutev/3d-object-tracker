@@ -87,13 +87,22 @@ public:
      */
     void estimate_bandwidth();
 
+    /**
+     * Set the mean-shift bandwidth.
+     *
+     * @param h The bandwidth.
+     */
+    void bandwidth(float h);
 
     /* Tracking */
 
     /**
      * Track the object in the current frame.
+     *
+     * @return A weight indicating the estimated accuracy of the
+     *   tracked position.
      */
-    void track();
+    float track();
 
 private:
     /**
@@ -110,7 +119,7 @@ private:
     /**
      * Mean-shift bandwidth.
      */
-    double bandwidth;
+    double h;
 
     /**
      * Range of the object in the z-dimension.
@@ -137,6 +146,8 @@ private:
      *         object.
      */
     cv::Mat backproject();
+
+    float compute_area_covered();
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's

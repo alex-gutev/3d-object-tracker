@@ -228,8 +228,12 @@ public:
      * Tracks the object in a single view.
      *
      * @param index The index of the view.
+     *
+     * @return The amount, by which, the position computed by the
+     *   tracker in this view should be weighted in merging the
+     *   positions of each view.
      */
-    void track(size_t index);
+    float track(size_t index);
 
 
     /** IO and Initialization */

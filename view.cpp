@@ -102,6 +102,16 @@ float view::disparity_to_depth(uchar disparity) {
     return 1.0f / ((disparity/255.0f)*(1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
 }
 
+#include <iostream>
+cv::Mat view::disparity_to_depth(cv::Mat img) {
+    cv::Mat m;
+
+    img.convertTo(m, CV_32FC1);
+
+    return 1.0f / ((m/255.0f) * (1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
+}
+
+
 const cv::Matx<float, 4, 4> &view::intrinsic_matrix() const {
     return mat_intrinsic;
 }

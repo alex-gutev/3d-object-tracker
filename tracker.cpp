@@ -174,7 +174,7 @@ void tracker::init_kalman_filter() {
     // Initialize Process and Measurement Noise Covariance Matrices
 
     kmfilter.processNoiseCov = 1e-5 * cv::Mat::eye(6, 6, CV_32F);
-    kmfilter.measurementNoiseCov = 1e-10 * cv::Mat::eye(6, 6, CV_32F);
+    kmfilter.measurementNoiseCov = 1e-1 * cv::Mat::eye(6, 6, CV_32F);
 }
 
 void tracker::init_kalman_state(float x, float y, float z) {
@@ -265,7 +265,6 @@ void tracker::estimate_bandwidth() {
     init_kalman_state(p[0], p[1], p[2]);
 }
 
-
 /// Tracking
 
 void tracker::track() {
@@ -276,15 +275,33 @@ void tracker::track() {
 #else
     kalman_predict();
 
+    cv::Vec4f pos({0,0,0,0});
+    float weights = 0;
+
     for (size_t i = 0; i < trackers.size(); ++i) {
-        track(i);
+        auto &tracker = trackers[i];
+        float weight = track(i);
+
+        cv::Rect r = tracker.window();
+        float z = tracker.window_z();
+
+        pos += weight * tracker.view_info().pixel_to_world(r.x + r.width/2, r.y + r.height/2, z);
+        weights += weight;
     }
 
+    pos /= weights;
+
+    kalman_correct(pos[0], pos[1], pos[2]);
+
     update_windows();
+
 #endif
 }
 
-void tracker::track(size_t index) {
-    trackers[index].track();
-    auto p = kalman_correct(index);
+float tracker::track(size_t index) {
+    float weight = trackers[index].track();
+
+    kalman_correct(index);
+
+    return weight;
 }
