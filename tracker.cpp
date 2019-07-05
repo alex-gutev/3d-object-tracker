@@ -23,7 +23,7 @@
 #include <iostream>
 
 #include "tracker.h"
-
+#include "util.h"
 
 /// Reading and intialization
 
@@ -121,10 +121,10 @@ void tracker::map_contours(const contours_type &contours, size_t src, size_t des
 
     out_mask = cv::Scalar::all(0);
 
-    bounds.x -= map_region;
-    bounds.y -= map_region;
-    bounds.width += map_region;
-    bounds.height += map_region;
+    bounds.x = clamp(bounds.x - map_region, 0, out_mask.size().width - 1);
+    bounds.y = clamp(bounds.y - map_region, 0, out_mask.size().height - 1);
+    bounds.width = clamp(bounds.width + map_region, 0, out_mask.size().width - bounds.x);
+    bounds.height = clamp(bounds.height + map_region, 0, out_mask.size().height - bounds.y);
 
     // Perform thresholding within bounding rectangle to determine
     // object's region
@@ -152,7 +152,13 @@ void tracker::map_contours(const contours_type &contours, size_t src, size_t des
 void tracker::map_contour(const contour_type &in_contour, contour_type &out_contour, view &src, view &dest) {
     // Map each contour pixel
     for (cv::Point pt : in_contour) {
-        out_contour.push_back(src.transform(pt, dest));
+        cv::Point t = src.transform(pt, dest);
+
+        // Clamp point to be within depth map image
+        t.x = clamp(t.x, 0, dest.depth().size().width - 1);
+        t.y = clamp(t.y, 0, dest.depth().size().height - 1);
+
+        out_contour.push_back(t);
     }
 }
 
