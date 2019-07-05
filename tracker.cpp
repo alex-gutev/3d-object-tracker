@@ -295,19 +295,23 @@ void tracker::track() {
         weights += weight;
     }
 
-    pos /= weights;
+    if (weights) {
+        pos /= weights;
 
-    kalman_correct(pos[0], pos[1], pos[2]);
+        kalman_correct(pos[0], pos[1], pos[2]);
 
-    update_windows();
+        update_windows();
+    }
 
 #endif
 }
 
 float tracker::track(size_t index) {
-    float weight = trackers[index].track();
-
-    kalman_correct(index);
+    float weight = trackers[index].track({
+            kmfilter.statePre.at<float>(0),
+            kmfilter.statePre.at<float>(1),
+            kmfilter.statePre.at<float>(2)
+        });
 
     return weight;
 }

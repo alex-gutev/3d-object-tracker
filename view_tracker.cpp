@@ -63,6 +63,8 @@ static double percentile(cv::Mat img, double percent, cv::Mat mask) {
     return i;
 }
 
+view_tracker::view_tracker() : classifier(cv::ml::NormalBayesClassifier::create()) {}
+
 void view_tracker::build_model(cv::Mat mask) {
     int channels[] = {0};
     int histSize[] = {180};
@@ -99,6 +101,20 @@ void view_tracker::build_model(cv::Mat mask) {
 
     z_range = (min - max) / 2;
 
+    train_occlusion_classifier(mask, m_window_z);
+}
+
+void view_tracker::train_occlusion_classifier(cv::Mat mask, float depth) {
+    cv::Mat dimg = m_view.depth()(m_window);
+
+    dimg = m_view.disparity_to_depth(dimg) - depth;
+    mask = mask(m_window);
+
+    cv::Mat labels;
+
+    mask.clone().convertTo(labels, CV_32S);
+
+    classifier->train(dimg.clone().reshape(0, dimg.total()),  cv::ml::ROW_SAMPLE, labels.reshape(0, labels.total()));
 }
 
 void view_tracker::estimate_bandwidth() {
@@ -126,7 +142,7 @@ void view_tracker::bandwidth(float value) {
     h = value;
 }
 
-float view_tracker::track() {
+float view_tracker::track(cv::Point3f predicted) {
     // Backproject histogram onto colour image
     cv::Mat pimg = backproject();
 
@@ -139,10 +155,14 @@ float view_tracker::track() {
 
     float weight = compute_area_covered();
 
-    // Perform 3D mean-shift
-    std::tie(m_window, m_window_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
+    if (!is_occluded(predicted)) {
+        // Perform 3D mean-shift
+        std::tie(m_window, m_window_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
 
-    return weight;
+        return weight;
+    }
+
+    return 0;
 #endif
 }
 
@@ -158,6 +178,44 @@ float view_tracker::compute_area_covered() {
     cv::threshold(img, img, m_window_z + z_range, 1, cv::THRESH_TOZERO_INV);
 
     return cv::countNonZero(img);
+}
+
+int view_tracker::is_occluded(cv::Point3f predicted) {
+    cv::Vec4f p(predicted.x, predicted.y, predicted.z, 1);
+
+    // Transform predicted world space position to pixel space
+    p = m_view.world_to_pixel(p);
+
+    // Clamp tracking window to be on-screen
+
+    auto size = m_view.depth().size();
+    cv::Rect r(std::min(std::max(int(p[0]) - m_window.width / 2, 0), size.width - m_window.width),
+               std::min(std::max(int(p[1]) - m_window.height / 2, 0), size.height - m_window.height),
+               m_window.width, m_window.height);
+
+    // Compute distances from predicted depth
+    cv::Mat img = m_view.disparity_to_depth(m_view.depth()) - p[2];
+
+    // Compute mean depth
+    float mean = cv::mean(img(r))[0];
+
+    cv::Mat m = cv::Mat(1,1, CV_32FC1);
+    m.at<float>(0,0) = mean;
+
+
+    // Determine whether mean depth value is that of the object
+    auto out = classifier->predict(m);
+
+
+    // If occluded set tracking window and depth to predicted values
+    if (!out) {
+        m_window = r;
+        m_window_z = p[2];
+
+        return true;
+    }
+
+    return false;
 }
 
 cv::Mat view_tracker::backproject() {

@@ -22,6 +22,7 @@
 #include <tuple>
 
 #include <opencv2/imgproc.hpp>
+#include <opencv2/ml.hpp>
 
 #include "view.h"
 
@@ -30,6 +31,8 @@
  */
 class view_tracker {
 public:
+    view_tracker();
+
     /* Accessors */
 
     /**
@@ -99,10 +102,12 @@ public:
     /**
      * Track the object in the current frame.
      *
+     * @param predicted The predicted position.
+     *
      * @return A weight indicating the estimated accuracy of the
      *   tracked position.
      */
-    float track();
+    float track(cv::Point3f predicted);
 
 private:
     /**
@@ -139,6 +144,23 @@ private:
 
 
     /**
+     * Bayesian Classifier used to determine whether the object is
+     * occluded.
+     */
+    cv::Ptr<cv::ml::NormalBayesClassifier> classifier;
+
+    /**
+     * Trains the occlusion classifier, with the depth values in the
+     * mask @a mask used as the training data.
+     *
+     * @param mask The mask indicating which pixels, in the tracking
+     *   window, belong to the object.
+     *
+     * @param depth The depth (z-coordinate) of the object's position.
+     */
+    void train_occlusion_classifier(cv::Mat mask, float depth);
+
+    /**
      * Backprojects the colour histogram onto the colour frame image.
      *
      * @return A single-channel probability image in which each
@@ -147,7 +169,22 @@ private:
      */
     cv::Mat backproject();
 
+    /**
+     * Computes a rough estimate of the area covered by the object,
+     * within the tracking window.
+     *
+     * @return The area covered in pixels.
+     */
     float compute_area_covered();
+
+    /**
+     * Determines whether the object is occluded in the current frame.
+     *
+     * @param predicted The predicted position of the object.
+     *
+     * @return True if the object is occluded, false otherwise.
+     */
+    int is_occluded(cv::Point3f predicted);
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's
