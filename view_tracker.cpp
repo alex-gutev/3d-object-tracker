@@ -208,7 +208,11 @@ int view_tracker::is_occluded(cv::Point3f predicted) {
 
 
     // If occluded set tracking window and depth to predicted values
-    if (!out) {
+
+    // Mean is compared to zero since out only indicates an occlusion
+    // if mean < 0, i.e. most pixels are at a depth between the object
+    // and camera.
+    if (!out && mean < 0) {
         m_window = r;
         m_window_z = p[2];
 
