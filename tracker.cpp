@@ -68,7 +68,8 @@ int tracker::detect_objects(size_t view_index) {
     cv::blur(depth, mask, cv::Size(3,3));
 
     // Threshold depth image
-    int threshold = cv::threshold(mask, mask, 0, 255, cv::THRESH_OTSU);
+    int type = (v.z_near() == 0 ? cv::THRESH_BINARY_INV : cv::THRESH_BINARY) | cv::THRESH_OTSU;
+    int threshold = cv::threshold(mask, mask, 0, 255, type);
 
     // Map contours to remaining views
     map_regions(view_index, threshold);

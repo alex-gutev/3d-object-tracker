@@ -99,16 +99,23 @@ cv::Point3f view::transform(cv::Point px, float depth, const view &next_view) {
 
 
 float view::disparity_to_depth(uchar disparity) {
-    return 1.0f / ((disparity/255.0f)*(1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
+    if (min_z != 0 & max_z != 0)
+        return 1.0f / ((disparity/255.0f)*(1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
+    else
+        return disparity + 1;
 }
 
-#include <iostream>
 cv::Mat view::disparity_to_depth(cv::Mat img) {
-    cv::Mat m;
+    if (min_z != 0 & max_z != 0) {
+        cv::Mat m;
 
-    img.convertTo(m, CV_32FC1);
+        img.convertTo(m, CV_32FC1);
 
-    return 1.0f / ((m/255.0f) * (1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
+        return 1.0f / ((m/255.0f) * (1.0f/min_z - 1.0f/max_z) + 1.0f/max_z);
+    }
+    else {
+        return img + 1;
+    }
 }
 
 

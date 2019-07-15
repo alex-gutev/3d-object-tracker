@@ -112,6 +112,7 @@ void view_tracker::train_occlusion_classifier(cv::Mat mask, float depth) {
 
     cv::Mat labels;
 
+    dimg.clone().convertTo(dimg, CV_32F);
     mask.clone().convertTo(labels, CV_32S);
 
     classifier->train(dimg.clone().reshape(0, dimg.total()),  cv::ml::ROW_SAMPLE, labels.reshape(0, labels.total()));
@@ -355,10 +356,6 @@ std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::R
             // Convert to pixel space
             cv::Vec4f centre = v.camera_to_pixel(pos);
 
-            // Compute perspective projection to to obtain the
-            // coordinates of the pixel at which the tracking window's
-            // centre is located. Shift tracking window's centre to
-            // the new centre.
 
             window.x = centre[0] - window.width / 2;
             window.y = centre[1] - window.height / 2;
