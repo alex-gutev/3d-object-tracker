@@ -144,6 +144,57 @@ private:
 
 
     /**
+     * Stores information about object detected within the tracking
+     * window.
+     */
+    struct object {
+        enum object_type {
+            /* Object forms part of background */
+            type_background = 0,
+            /* Occluding Object */
+            type_occluder = 1
+        };
+
+        /**
+         * Constant indicating the object type.
+         */
+        object_type type;
+
+        /**
+         * Depth of the pixel closest to the camera.
+         */
+        float min;
+        /**
+         * Depth of the pixel furthest from the camera.
+         */
+        float max;
+
+        /**
+         * Median depth of the pixels. Indicates position of object in
+         * Z axis.
+         */
+        float depth;
+
+        /**
+         * Constructor.
+         *
+         * @param type Object type.
+         * @param min Depth of pixel closest to camera.
+         * @param max Depth of pixel furthest from camera.
+         * @param depth Median pixel depth.
+         */
+        object(object_type type, float min, float max, float depth) :
+            type(type), min(min), max(max), depth(depth) {}
+    };
+
+    /**
+     * List of objects detected, within the tracking window, in the
+     * previous frame.
+     */
+    std::vector<object> objects;
+
+
+    /**
      * Bayesian Classifier used to determine whether the object is
      * occluded.
      */
@@ -180,11 +231,23 @@ private:
     /**
      * Determines whether the object is occluded in the current frame.
      *
+     * @param window The tracking window
      * @param predicted The predicted position of the object.
      *
      * @return True if the object is occluded, false otherwise.
      */
-    int is_occluded(cv::Point3f predicted);
+    bool is_occluded(cv::Rect window, cv::Point3f predicted);
+
+    /**
+     * Determines whether a detected object is an occluder detected in
+     * the previous frame.
+     *
+     * @param depth Median pixel depth of the object.
+     * @param pz Predicted Z-position of the object being tracked.
+     *
+     * @return true if the object is an occluder, false otherwise.
+     */
+    bool is_occluder(float depth, float pz) const;
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's

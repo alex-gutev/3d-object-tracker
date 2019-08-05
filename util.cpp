@@ -19,6 +19,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
+#include <algorithm>
+#include <numeric>
+
 #include "util.h"
 
 static unsigned int mat_as_num(cv::Mat m) {
@@ -118,4 +121,44 @@ size_t watershed(cv::Mat depth, cv::Mat color, cv::Mat &markers) {
     cv::watershed(color, markers);
 
     return n + 1;
+}
+
+double percentile(cv::Mat img, double percent, cv::Mat mask) {
+    double min, max;
+
+    cv::minMaxIdx(img, &min, &max);
+
+    int channels[] = {0};
+    int histSize[] = {256};
+    float hranges[] = {(float)min, (float)max};
+    const float *ranges[] = {hranges};
+
+    cv::Mat hist;
+
+    // Calculate histogram
+    cv::calcHist(&img, 1, channels, mask, hist, 1, histSize, ranges);
+
+    int total = 0;
+
+    // Calculate the number of the pixel corresponding to the percentile
+    double percentile = std::accumulate(hist.begin<float>(), hist.end<float>(), 0) * percent;
+
+    int i = 0;
+    for (auto it = hist.begin<float>(), end = hist.end<float>(); it != end; ++it) {
+        int bin = *it;
+        int prev = total;
+
+        total += bin;
+
+        // If the number of pixels exceeds the percentile exit loop
+        if (total >= percentile) {
+           float percent = (percentile - prev) / bin;
+
+           return ((i + percent) / 255.0f) * (max - min) + min;
+        }
+
+        i++;
+    }
+
+    return -1;
 }

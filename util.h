@@ -74,6 +74,18 @@ cv::Mat compute_lbp(cv::Mat img, int ksize);
  */
 size_t watershed(cv::Mat depth, cv::Mat color, cv::Mat &markers);
 
+/**
+ * Returns the @a percent percentile of the values in the image,
+ * within the mask.
+ *
+ * @param img       The image
+ * @param percent   The percentile
+ * @param mask      The mask of the pixels which are considered
+ *
+ * @return The percentile value
+ */
+double percentile(cv::Mat img, double percent, cv::Mat mask);
+
 #endif /* AGTRACK_UTIL_H */
 
 // Local Variables:

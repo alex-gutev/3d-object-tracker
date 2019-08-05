@@ -21,47 +21,7 @@
 #include <algorithm>
 #include <numeric>
 
-/**
- * Returns the @a percent percentile of the values in the image,
- * within the mask.
- *
- * @param img       The image
- * @param percent   The percentile
- * @param mask      The mask of the pixels which are considered
- *
- * @return The percentile value
- */
-static double percentile(cv::Mat img, double percent, cv::Mat mask) {
-    int channels[] = {0};
-    int histSize[] = {256};
-    float hranges[] = {0, 255};
-    const float *ranges[] = {hranges};
-
-    cv::Mat hist;
-
-    // Calculate histogram
-    cv::calcHist(&img, 1, channels, mask, hist, 1, histSize, ranges);
-
-    int total = 0;
-
-    // Calculate the number of the pixel corresponding to the percentile
-    double percentile = std::accumulate(hist.begin<float>(), hist.end<float>(), 0) * percent;
-
-    int i = 0;
-    for (auto it = hist.begin<float>(), end = hist.end<float>(); it != end; ++it) {
-        total += *it;
-
-        // If the number of pixels exceeds the percentile exit loop
-        if (total >= percentile) {
-            break;
-        }
-
-        i++;
-    }
-
-    // Return the value corresponding to the percentile
-    return i;
-}
+#include "util.h"
 
 view_tracker::view_tracker() : classifier(cv::ml::NormalBayesClassifier::create()) {}
 
@@ -99,9 +59,7 @@ void view_tracker::build_model(cv::Mat mask) {
     min = m_view.disparity_to_depth(min);
     max = m_view.disparity_to_depth(max);
 
-    z_range = (min - max) / 2;
-
-    train_occlusion_classifier(mask, m_window_z);
+    z_range = cv::abs(min - max) / 2;
 }
 
 void view_tracker::train_occlusion_classifier(cv::Mat mask, float depth) {
@@ -156,12 +114,24 @@ float view_tracker::track(cv::Point3f predicted) {
 
     float weight = compute_area_covered();
 
-    if (!is_occluded(predicted)) {
-        // Perform 3D mean-shift
-        std::tie(m_window, m_window_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
+    cv::Rect new_window;
+    float new_z;
+
+    // Perform 3D mean-shift
+    std::tie(new_window, new_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
+
+    if (!is_occluded(new_window, predicted)) {
+        m_window = new_window;
+        m_window_z = new_z;
 
         return weight;
     }
+
+    cv::Vec4f pixel = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
+
+    m_window = cv::Rect(pixel[0] - m_window.width / 2, pixel[1] - m_window.height / 2,
+                        m_window.width, m_window.height);
+    m_window_z = pixel[2];
 
     return 0;
 #endif
@@ -169,9 +139,15 @@ float view_tracker::track(cv::Point3f predicted) {
 
 float view_tracker::compute_area_covered() {
     auto size = m_view.depth().size();
-    cv::Rect r(std::min(std::max(0, m_window.x - m_window.width/2), size.width - m_window.width*2),
-               std::min(std::max(0, m_window.y - m_window.height/2), size.height - m_window.height*2),
-               m_window.width*2, m_window.height*2);
+
+    cv::Rect r = clamp_region(
+        cv::Rect(
+            m_window.x - m_window.width / 2,
+            m_window.y - m_window.height / 2,
+            m_window.width *2,
+            m_window.height *2
+            ),
+        size);
 
     cv::Mat img = m_view.disparity_to_depth(m_view.depth()(r));
 
@@ -181,43 +157,103 @@ float view_tracker::compute_area_covered() {
     return cv::countNonZero(img);
 }
 
-int view_tracker::is_occluded(cv::Point3f predicted) {
-    cv::Vec4f p(predicted.x, predicted.y, predicted.z, 1);
 
-    // Transform predicted world space position to pixel space
-    p = m_view.world_to_pixel(p);
+bool view_tracker::is_occluded(cv::Rect r, cv::Point3f predicted) {
+    cv::Vec4f p = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
 
-    // Clamp tracking window to be on-screen
+    float z = p[2];
 
-    auto size = m_view.depth().size();
-    cv::Rect r(std::min(std::max(int(p[0]) - m_window.width / 2, 0), size.width - m_window.width),
-               std::min(std::max(int(p[1]) - m_window.height / 2, 0), size.height - m_window.height),
-               m_window.width, m_window.height);
+    r.x = clamp(r.x, 0, m_view.depth().size().width - r.width);
+    r.y = clamp(r.y, 0, m_view.depth().size().height - r.height);
 
-    // Compute distances from predicted depth
-    cv::Mat img = m_view.disparity_to_depth(m_view.depth()) - p[2];
+    // Convert disparity map to depth map
+    cv::Mat dimg = m_view.disparity_to_depth(m_view.depth()(r));
+    cv::Mat img;
 
-    // Compute mean depth
-    float mean = cv::mean(img(r))[0];
+    // Normalize depth map to range [0, 255] in order to perform MS clustering
+    cv::normalize(dimg, img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
 
-    cv::Mat m = cv::Mat(1,1, CV_32FC1);
-    m.at<float>(0,0) = mean;
+    // Convert to 3-channel image for pyrMeanShiftFiltering function
+    cv::Mat channels[] = {img, img, img};
+    cv::merge(channels, 3, img);
 
+    // Perform Mean Shift Clustering
+    cv::pyrMeanShiftFiltering(img, img, 10, z_range);
 
-    // Determine whether mean depth value is that of the object
-    auto out = classifier->predict(m);
+    // Extract single channel from clustered image
+    cv::Mat simg;
+    cv::extractChannel(img, simg, 0);
 
+    // Segment clustered image
+    cv::Mat seg;
+    size_t n = watershed(~simg, img, seg);
 
-    // If occluded set tracking window and depth to predicted values
+    float closest = -1;
+    float closest_index = -1;
+    float closest_dist = 0;
+    bool closest_in_range = false;
 
-    // Mean is compared to zero since out only indicates an occlusion
-    // if mean < 0, i.e. most pixels are at a depth between the object
-    // and camera.
-    if (!out && mean < 0) {
-        m_window = r;
-        m_window_z = p[2];
+    // Compute statistics of new objects in scene
+    std::vector<object> new_objects;
 
+    for (int i = 1; i < n; ++i) {
+        if (cv::countNonZero(seg == i)) {
+            auto median = percentile(dimg, 0.5, seg == i);
+
+            auto min = percentile(dimg, 0.5, seg == i);
+            auto max = percentile(dimg, 0.95, seg == i);
+
+            new_objects.emplace_back(min < z ? object::type_occluder : object::type_background, min, max, median);
+
+            float dist = cv::abs(z - median);
+
+            if ((min < z && z < max) ||
+                (cv::abs(dist) < z_range && !closest_in_range)) {
+
+                if (!is_occluder(median, z)) {
+                    if (closest == -1 || dist < closest_dist) {
+                        closest = new_objects.size() - 1;
+                        closest_index = i;
+                        closest_dist = dist;
+                        closest_in_range = min < z && z < max;
+                    }
+                }
+            }
+        }
+    }
+
+    objects = std::move(new_objects);
+
+    if (closest != -1) {
+        float depth = objects.at(closest).depth;
+
+        cv::Mat points;
+        cv::findNonZero(seg == closest_index, points);
+
+        objects.erase(objects.begin() + closest);
+
+        objects.erase(
+            std::remove_if(objects.begin(), objects.end(), [depth] (const object &occ) {
+                return occ.min < depth && depth < occ.max;
+            }),
+            objects.end()
+            );
+    }
+    else {
         return true;
+    }
+
+    return false;
+}
+
+bool view_tracker::is_occluder(float depth, float pz) const {
+    for (auto &occ : objects) {
+        if (occ.type == object::type_occluder && depth < occ.min) {
+            return true;
+        }
+        if (occ.min < depth && depth < occ.max) {
+            return true;
+        }
     }
 
     return false;
