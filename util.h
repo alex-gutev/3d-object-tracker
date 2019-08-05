@@ -39,6 +39,41 @@ T clamp(T x, T min, T max) {
     return std::min(std::max(x, min), max);
 }
 
+/**
+ * Clamps the region @a r to be within an image with origin at (0,0)
+ * and size @a size.
+ *
+ * @param r Region to clamp.
+ * @param size Size of the image.
+ */
+cv::Rect clamp_region(cv::Rect r, cv::Size size);
+
+/**
+ * Computes the linear binary pattern of @a img.
+ *
+ * @param img Image of which to compute the LBP.
+ * @param ksize LBP kernel size.
+ *
+ * @return Matrix in which each element contains the LBP at the
+ *   corresponding pixel within @a img.
+ */
+cv::Mat compute_lbp(cv::Mat img, int ksize);
+
+
+/**
+ * Segments the image @a color using the watershed algorithm with the
+ * markers determined by the depth image @a depth.
+ *
+ * @param depth Single-channel depth image used to determine markers.
+ *
+ * @param color Three-channel image which is actually segmented.
+ *
+ * @param markers Output matrix containing segmented image.
+ *
+ * @return The number of objects.
+ */
+size_t watershed(cv::Mat depth, cv::Mat color, cv::Mat &markers);
+
 #endif /* AGTRACK_UTIL_H */
 
 // Local Variables:

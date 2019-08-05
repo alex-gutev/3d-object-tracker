@@ -213,6 +213,10 @@ public:
         return depth_frame;
     }
 
+    const cv::Mat &depth() const {
+        return depth_frame;
+    }
+
     /**
      * Converts from a depth map intensity value to the actual
      * z-coordinate value of the pixel

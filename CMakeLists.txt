@@ -38,6 +38,8 @@ add_executable(tracker
   view.cpp
   view.h
   view_parser.cpp
-  view_parser.h)
+  view_parser.h
+  util.h
+  util.cpp)
 
 target_link_libraries(tracker ${OpenCV_LIBS})

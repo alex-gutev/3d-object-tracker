@@ -50,34 +50,74 @@ void tracker::primary_view(int v) {
 
 /// Segmentation
 
-int tracker::detect_objects(size_t view_index) {
+/**
+ * Segments the depth, @a depth, and color, @a color, images by
+ * watershedding. The results are combined into a single segmented
+ * image by a bitwise and operation.
+ *
+ * @param mask Output matrix in which the object mask image is stored.
+ * @param depth Depth image.
+ * @param color Color image.
+ */
+static void get_mask(cv::Mat &mask, cv::Mat depth, cv::Mat color) {
+    cv::Mat wcolor;
+
+    watershed(depth, color, wcolor);
+
+    cv::Mat cdepth;
+    cv::Mat wdepth;
+    cv::cvtColor(depth, cdepth, CV_GRAY2BGR);
+
+    watershed(depth, cdepth, wdepth);
+
+    cv::bitwise_and(wcolor, wdepth, mask);
+}
+
+/**
+ * Determines the mask belonging indicating the pixels belonging to
+ * the object in the region @a r.
+ *
+ * @param mask Output matrix in which object mask is stored.
+ * @param r Region to segment.
+ * @param depth Depth image.
+ * @param color Color image.
+ */
+static void get_mask(cv::Mat &mask, cv::Rect r, cv::Mat depth, cv::Mat color) {
+    get_mask(mask, depth, color);
+
+    int l = mask.at<int>(r.y + r.height/2, r.x + r.width/2);
+
+    mask.setTo(0, mask != l);
+    mask.convertTo(mask, CV_8U);
+
+    cv::Mat ones = cv::Mat::zeros(mask.size(), CV_8UC1);
+    ones(r) = 255;
+
+    cv::bitwise_and(mask, ones, mask);
+    mask.setTo(255, mask);
+}
+
+void tracker::detect_objects(size_t view_index) {
     view_tracker &tracker = trackers[view_index];
     view &v = tracker.view_info();
 
-    // Get depth image within window
-    cv::Mat depth = v.depth()(tracker.window());
+    cv::Mat depth = v.depth().clone();
+    cv::medianBlur(v.depth(), depth, 3);
 
-    // Create mask image
-    m_masks[view_index].create(v.depth().size(), CV_8UC1);
-    m_masks[view_index] = cv::Scalar(0);
+    // Segment region within tracking window.
+    get_mask(m_masks[view_index], tracker.window(), depth, v.color());
 
-    // Get reference to mask image within window
-    cv::Mat mask = m_masks[view_index](tracker.window());
+    cv::Mat mask = m_masks[view_index];
 
-    // Reduce noise with a 3x3 kernel
-    cv::blur(depth, mask, cv::Size(3,3));
-
-    // Threshold depth image
-    int type = (v.z_near() == 0 ? cv::THRESH_BINARY_INV : cv::THRESH_BINARY) | cv::THRESH_OTSU;
-    int threshold = cv::threshold(mask, mask, 0, 255, type);
+    cv::Mat pts;
+    cv::findNonZero(mask, pts);
+    tracker.window(cv::boundingRect(pts));
 
     // Map contours to remaining views
-    map_regions(view_index, threshold);
-
-    return threshold;
+    map_regions(view_index);
 }
 
-void tracker::map_regions(size_t index, int depth_threshold) {
+void tracker::map_regions(size_t index) {
     std::vector<std::vector<cv::Point>> contours;
 
     // Find contours of object region
@@ -86,63 +126,53 @@ void tracker::map_regions(size_t index, int depth_threshold) {
     // Map contours to remaining views
     for (int i = 0; i < trackers.size(); i++) {
         if (i != index) {
-            map_contours(contours, index, i, depth_threshold);
+            map_contours(contours, index, i);
         }
     }
 }
 
-void tracker::map_contours(const contours_type &contours, size_t src, size_t dest, int depth_threshold) {
+void tracker::map_contours(const contours_type &contours, size_t src, size_t dest) {
     view &v_src = trackers[src].view_info();
     view &v_dest = trackers[dest].view_info();
 
-    // Create mask image for view
-    m_masks[dest].create(v_dest.depth().size(), CV_8UC1);
-    cv::Mat out_mask = m_masks[dest];
-
-    out_mask = cv::Scalar::all(0);
+    // Create image in which contours are drawn
+    cv::Mat contour_image = cv::Mat::zeros(v_dest.depth().size(), CV_8UC1);
 
     // Map contours to destination view
     for (auto &contour : contours) {
         contour_type new_contour;
 
         map_contour(contour, new_contour, v_src, v_dest);
-        cv::drawContours(out_mask, contours_type({new_contour}), 0, cv::Scalar(255), cv::FILLED);
+        cv::drawContours(contour_image, contours_type({new_contour}), 0, cv::Scalar(255), cv::FILLED);
     }
 
     // Use morphology to remove noise in mapped contours
     cv::Mat structuringElement = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5,5));
-    cv::morphologyEx(out_mask, out_mask, cv::MORPH_CLOSE, structuringElement);
+    cv::morphologyEx(contour_image, contour_image, cv::MORPH_CLOSE, structuringElement);
 
     // Find all contour pixels
     std::vector<cv::Point> mask_points;
-    cv::findNonZero(out_mask, mask_points);
+    cv::findNonZero(contour_image, mask_points);
 
-    // Get bounding rectangle of contours
+    // Get bounding rectangle of contours to get segmentation region
     cv::Rect bounds = cv::boundingRect(mask_points);
 
-    out_mask = cv::Scalar::all(0);
+    // Clamp bounding rectange to be on screen
+    bounds.x = clamp(bounds.x - map_region, 0, contour_image.size().width - 1);
+    bounds.y = clamp(bounds.y - map_region, 0, contour_image.size().height - 1);
+    bounds.width = clamp(bounds.width + map_region, 0, contour_image.size().width - bounds.x);
+    bounds.height = clamp(bounds.height + map_region, 0, contour_image.size().height - bounds.y);
 
-    bounds.x = clamp(bounds.x - map_region, 0, out_mask.size().width - 1);
-    bounds.y = clamp(bounds.y - map_region, 0, out_mask.size().height - 1);
-    bounds.width = clamp(bounds.width + map_region, 0, out_mask.size().width - bounds.x);
-    bounds.height = clamp(bounds.height + map_region, 0, out_mask.size().height - bounds.y);
-
-    // Perform thresholding within bounding rectangle to determine
-    // object's region
-    cv::threshold(v_dest.depth()(bounds),
-                  m_masks[dest](bounds),
-                  depth_threshold,
-                  255, cv::THRESH_BINARY);
+    // Get object mask in view
+    get_mask(m_masks[dest], bounds, v_dest.depth(), v_dest.color());
 
 
+    // Get points making up region
     cv::Mat pts;
-    cv::findNonZero(m_masks[dest](bounds), pts);
+    cv::findNonZero(m_masks[dest], pts);
 
     // Get bounding rectangle of region
     cv::Rect rect = cv::boundingRect(pts);
-
-    rect.x += bounds.x;
-    rect.y += bounds.y;
 
     // Set bounding rectangle of region as view's initial tracking
     // window

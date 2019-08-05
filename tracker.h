@@ -88,9 +88,8 @@ class tracker {
      * views, within the mapped region.
      *
      * @param view  Index of the view in which the region was detected.
-     * @param depth_threshold The depth threshold.
      */
-    void map_regions(size_t view, int depth_threshold);
+    void map_regions(size_t view);
 
     /**
      * Maps contours from the view @a src to the view @a dest, and
@@ -100,9 +99,8 @@ class tracker {
      * @param contours          The contours to be mapped.
      * @param src               The source view.
      * @param dest              The destination view.
-     * @param depth_threshold   The depth threshold.
      */
-    void map_contours(const contours_type &contours, size_t src, size_t dest, int depth_threshold);
+    void map_contours(const contours_type &contours, size_t src, size_t dest);
 
     /**
      * Maps a single contour from the view @a src to the view @a dest
@@ -178,11 +176,8 @@ public:
      *
      * @param view Index of the view in which to perform object
      * detection.
-     *
-     * @return The optimal depth threshold, computed using Otsu
-     *         Thresholding.
      */
-    int detect_objects(size_t view);
+    void detect_objects(size_t view);
 
     /**
      * Builds the appearance models, for each view, of the object.
