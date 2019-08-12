@@ -86,6 +86,34 @@ size_t watershed(cv::Mat depth, cv::Mat color, cv::Mat &markers);
  */
 double percentile(cv::Mat img, double percent, cv::Mat mask);
 
+
+/**
+ * Computes the magnitude of a vector.
+ *
+ * @param v The vector
+ *
+ * @return The magnitude
+ */
+template <typename T>
+float magnitude(T v) {
+    float mag = 0;
+
+    for (int i = 0; i < v.cols; i++) {
+        mag += v[i] * v[i];
+    }
+
+    return sqrtf(mag);
+}
+
+/**
+ * Computes the magnitude of a 3D point vector.
+ *
+ * @param pt The vector
+ * @return The magnitude
+ */
+float magnitude(cv::Point3f pt);
+
+
 #endif /* AGTRACK_UTIL_H */
 
 // Local Variables:

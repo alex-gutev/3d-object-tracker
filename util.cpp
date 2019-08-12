@@ -162,3 +162,7 @@ double percentile(cv::Mat img, double percent, cv::Mat mask) {
 
     return -1;
 }
+
+float magnitude(cv::Point3f pt) {
+    return sqrtf(pt.x * pt.x + pt.y * pt.y + pt.z * pt.z);
+}

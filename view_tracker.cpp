@@ -120,9 +120,8 @@ float view_tracker::track(cv::Point3f predicted) {
     // Perform 3D mean-shift
     std::tie(new_window, new_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
 
-    if (!is_occluded(new_window, predicted)) {
+    if (!is_occluded(new_window, new_z, predicted)) {
         m_window = new_window;
-        m_window_z = new_z;
 
         return weight;
     }
@@ -158,10 +157,11 @@ float view_tracker::compute_area_covered() {
 }
 
 
-bool view_tracker::is_occluded(cv::Rect r, cv::Point3f predicted) {
-    cv::Vec4f p = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
+// Occlusion Detection ////////////////////////////////////////////////////////
 
-    float z = p[2];
+bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
+    cv::Vec4f p = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
+    float pz = p[2];
 
     r.x = clamp(r.x, 0, m_view.depth().size().width - r.width);
     r.y = clamp(r.y, 0, m_view.depth().size().height - r.height);
@@ -188,11 +188,6 @@ bool view_tracker::is_occluded(cv::Rect r, cv::Point3f predicted) {
     cv::Mat seg;
     size_t n = watershed(~simg, img, seg);
 
-    float closest = -1;
-    float closest_index = -1;
-    float closest_dist = 0;
-    bool closest_in_range = false;
-
     // Compute statistics of new objects in scene
     std::vector<object> new_objects;
 
@@ -203,61 +198,165 @@ bool view_tracker::is_occluded(cv::Rect r, cv::Point3f predicted) {
             auto min = percentile(dimg, 0.5, seg == i);
             auto max = percentile(dimg, 0.95, seg == i);
 
-            new_objects.emplace_back(min < z ? object::type_occluder : object::type_background, min, max, median);
+            new_objects.emplace_back(object::type_unknown, min, max, median);
+            new_objects.back().region = seg == i;
 
-            float dist = cv::abs(z - median);
+            cv::Mat points;
+            cv::findNonZero(seg == i, points);
+            cv::Rect box = cv::boundingRect(points);
 
-            if ((min < z && z < max) ||
-                (cv::abs(dist) < z_range && !closest_in_range)) {
+            auto pt = m_view.pixel_to_world(box.x + box.width/2.0f, box.y + box.height / 2.0f, median);
 
-                if (!is_occluder(median, z)) {
-                    if (closest == -1 || dist < closest_dist) {
-                        closest = new_objects.size() - 1;
-                        closest_index = i;
-                        closest_dist = dist;
-                        closest_in_range = min < z && z < max;
-                    }
-                }
+            new_objects.back().pos = cv::Point3f(pt[0], pt[1], pt[2]);
+            new_objects.back().bounds = box;
+        }
+    }
+
+    match_objects(new_objects);
+
+    bool occ = true;
+    float new_z = 0;
+
+
+    for (auto &obj : new_objects) {
+        // If the object's type has not already been determined,
+        // i.e. it was not matched to an object in the previous frame.
+        if (!obj.type) {
+            if (obj.max < pz && obj.max < m_window_z) {
+                obj.type = object::type_occluder;
+            }
+            else if (obj.min < pz && pz < obj.max) {
+                obj.type = object::type_target;
+            }
+            else if (cv::abs(pz - obj.depth) < z_range) {
+                obj.type = object::type_target;
+            }
+            else {
+                obj.type = object::type_background;
+            }
+        }
+    }
+
+    for (auto &obj : new_objects) {
+        // If object is an occluder and the z position found by
+        // mean-shift lies within the object's z range, return true.
+        if (obj.type == object::type_occluder) {
+            if (obj.min < z && z < obj.max) {
+                new_z = obj.max + z_range/4;
+                occ = true;
+                break;
+            }
+        }
+
+        // If the object is part of the target, set new z-coordinate
+        // to median depth of the object.
+        if (obj.type == object::type_target) {
+            if (obj.min < z && z < obj.max) {
+                new_z = obj.depth;
+                occ = false;
+            }
+            else if (cv::abs(z - obj.depth) < z_range) {
+                obj.type = object::type_target;
+                new_z = obj.depth;
+                occ = false;
             }
         }
     }
 
     objects = std::move(new_objects);
+    }
 
-    if (closest != -1) {
-        float depth = objects.at(closest).depth;
+    if (!occ) m_window_z = new_z;
+    return occ;
+}
 
-        cv::Mat points;
-        cv::findNonZero(seg == closest_index, points);
 
-        objects.erase(objects.begin() + closest);
+/**
+ * Stores information about the similarity between an object in the
+ * previous frame and current frame.
+ */
+struct matching {
+    /**
+     * 3D Euclidean distance between object centres.
+     */
+    float dist;
 
-        objects.erase(
-            std::remove_if(objects.begin(), objects.end(), [depth] (const object &occ) {
-                return occ.min < depth && depth < occ.max;
+    /**
+     * Index of object in previous frame.
+     */
+    size_t old;
+
+    /**
+     * Index of object in current frame.
+     */
+    size_t current;
+
+    /**
+     * Constructor
+     *
+     * @param dist 3D Euclidean distance between objects.
+     * @param old Index of object in previous frame.
+     * @param current Index of object in current frame.
+     */
+    matching(float dist, size_t old, size_t current) :
+        dist(dist), old(old), current(current) {}
+};
+
+void view_tracker::match_objects(std::vector<object> &new_objects) const {
+    std::vector<matching> pairs;
+
+    // Compute distances between each pair of old and new objects.
+
+    size_t new_i = 0;
+
+    for (auto new_obj : new_objects) {
+        size_t old_i = 0;
+
+        for (auto old : objects) {
+            float d = magnitude(old.pos - new_obj.pos);
+            float overlap = cv::countNonZero(old.region) / float(cv::countNonZero(new_obj.region));
+
+            // If there isn't significant overlap between the objects
+            // then don't consider it a possible match
+
+            if (overlap > 0.5) {
+                pairs.emplace_back(d, old_i, new_i);
+            }
+
+            old_i++;
+        }
+
+        new_i++;
+    }
+
+
+    // Sort by distance in ascending order
+
+    std::sort(pairs.begin(), pairs.end(), [](const matching &a, const matching &b) {
+        return a.dist < b.dist;
+    });
+
+    // Iterate through each pair starting from pair with smallest
+    // distance, while the array is not empty.
+    while (pairs.size()) {
+        auto &match = pairs.front();
+
+        // Update type of new object to match old object
+        new_objects[match.current].type = objects[match.old].type;
+
+        // Remove remaining pairings involving either the current or
+        // previous object.
+        pairs.erase(
+            std::remove_if(pairs.begin(), pairs.end(), [=] (const matching &m) {
+                return m.old == match.old || m.current == match.current;
             }),
-            objects.end()
+            pairs.end()
             );
     }
-    else {
-        return true;
-    }
-
-    return false;
 }
 
-bool view_tracker::is_occluder(float depth, float pz) const {
-    for (auto &occ : objects) {
-        if (occ.type == object::type_occluder && depth < occ.min) {
-            return true;
-        }
-        if (occ.min < depth && depth < occ.max) {
-            return true;
-        }
-    }
 
-    return false;
-}
+// Mean Shift Tracking ////////////////////////////////////////////////////////
 
 cv::Mat view_tracker::backproject() {
     cv::Mat hsv;
@@ -274,34 +373,6 @@ cv::Mat view_tracker::backproject() {
     cv::calcBackProject(&hsv, 1, channels, hist, dst, ranges);
 
     return dst;
-}
-
-/**
- * Computes the magnitude of a vector.
- *
- * @param v The vector
- *
- * @return The magnitude
- */
-template <typename T>
-static float magnitude(T v) {
-    float mag = 0;
-
-    for (int i = 0; i < v.cols; i++) {
-        mag += v[i] * v[i];
-    }
-
-    return sqrtf(mag);
-}
-
-/**
- * Computes the magnitude of a 3D vector
- *
- * @param pt The vector
- * @return The magnitude
- */
-static float magnitude(cv::Point3f pt) {
-    return sqrtf(pt.x * pt.x + pt.y * pt.y + pt.z * pt.z);
 }
 
 std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::Rect window, float depth, int num_iters, float eps, float h) {

@@ -224,7 +224,7 @@ public:
      * @param disparity The depth map intensity value
      * @return The value of the z-coordinate of the pixel
      */
-    float disparity_to_depth(uchar disparity);
+    float disparity_to_depth(uchar disparity) const;
 
     /**
      * Converts the depth intensity values to the actual z-coordinate
@@ -235,7 +235,7 @@ public:
      * @return The image with the depth intensity values transformed
      *    to z-coordinates
      */
-    cv::Mat disparity_to_depth(cv::Mat img);
+    cv::Mat disparity_to_depth(cv::Mat img) const;
 
     /**
      * Transforms a point, on the view's frame image, to the view's

@@ -149,10 +149,16 @@ private:
      */
     struct object {
         enum object_type {
+            /* Unknown Object Type */
+            type_unknown = 0,
+
             /* Object forms part of background */
-            type_background = 0,
+            type_background = 1,
             /* Occluding Object */
-            type_occluder = 1
+            type_occluder,
+
+            /* Part of the target object */
+            type_target,
         };
 
         /**
@@ -174,6 +180,21 @@ private:
          * Z axis.
          */
         float depth;
+
+        /**
+         * Position of object's centre in 3D world space.
+         */
+        cv::Point3f pos;
+
+        /**
+         * Mask identifying pixels belonging to the object.
+         */
+        cv::Mat region;
+
+        /**
+         * Bounding rectangle of the object.
+         */
+        cv::Rect bounds;
 
         /**
          * Constructor.
@@ -228,26 +249,38 @@ private:
      */
     float compute_area_covered();
 
+
+    /* Occlusion Detection */
+
     /**
      * Determines whether the object is occluded in the current frame.
      *
      * @param window The tracking window
+     *
+     * @param z The new z position of the object as determined by the
+     *    mean shift tracker.
+     *
      * @param predicted The predicted position of the object.
      *
      * @return True if the object is occluded, false otherwise.
      */
-    bool is_occluded(cv::Rect window, cv::Point3f predicted);
+    bool is_occluded(cv::Rect window, float z, cv::Point3f predicted);
 
     /**
-     * Determines whether a detected object is an occluder detected in
-     * the previous frame.
+     * Matches the objects detected in the previous frame, in the
+     * 'objects' array, to the objects detected in the current frame,
+     * in the array @a new_objects.
      *
-     * @param depth Median pixel depth of the object.
-     * @param pz Predicted Z-position of the object being tracked.
+     * For each object, in @a new_objects, which is matched to an
+     * object in the previous frame, its type is set to that of the
+     * object in the previous frame.
      *
-     * @return true if the object is an occluder, false otherwise.
+     * @param new_objects Array of objects to be matched.
      */
-    bool is_occluder(float depth, float pz) const;
+    void match_objects(std::vector<object> &new_objects) const;
+
+
+    /* Mean Shift Tracking */
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's
