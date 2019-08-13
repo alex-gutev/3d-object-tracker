@@ -181,7 +181,27 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
         }
     }
 
-    for (auto &obj : new_objects) {
+    bool occ = true;
+    float new_z = 0;
+
+    std::tie(occ, new_z) = is_occluded(new_objects, z);
+
+    objects = std::move(new_objects);
+
+    if (!occ) m_window_z = new_z;
+    return occ;
+}
+
+std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &objects, float z) const {
+    bool occ = true;
+    float new_z = 0;
+
+    float closest = -1;
+    float closest_dist = 0;
+
+    size_t i = 0;
+
+    for (auto &obj : objects) {
         // If object is an occluder and the z position found by
         // mean-shift lies within the object's z range, return true.
         if (obj.type == object::type_occluder) {
@@ -195,23 +215,24 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
         // If the object is part of the target, set new z-coordinate
         // to median depth of the object.
         if (obj.type == object::type_target) {
-            if (obj.min < z && z < obj.max) {
-                new_z = obj.depth;
-                occ = false;
-            }
-            else if (cv::abs(z - obj.depth) < z_range) {
-                obj.type = object::type_target;
-                new_z = obj.depth;
+            float d = cv::abs(z - obj.depth);
+            if ((obj.min < z && z < obj.max) ||
+               (d < z_range)) {
+
+                if (closest == -1 || d < closest_dist) {
+                    closest = i;
+                    closest_dist = d;
+                }
                 occ = false;
             }
         }
+
+        i++;
     }
 
-    objects = std::move(new_objects);
-    }
+    if (!occ) new_z = objects[closest].depth;
 
-    if (!occ) m_window_z = new_z;
-    return occ;
+    return std::make_pair(occ, new_z);
 }
 
 
