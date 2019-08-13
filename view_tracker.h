@@ -237,6 +237,19 @@ private:
     bool is_occluded(cv::Rect window, float z, cv::Point3f predicted);
 
     /**
+     * Determines whether the position found by mean shift is of an
+     * occluding object or not.
+     *
+     * @param objects Objects detected in the current scene.
+     * @param z Z position found by MS tracker.
+     *
+     * @return A pair whether the first element is true if the
+     *   position found is of an occluder. The second element is the
+     *   z-coordinate of the target object.
+     */
+    std::pair<bool, float> is_occluded(const std::vector<object> &objects, float z) const;
+
+    /**
      * Segments the current frame image, within the region @a r, to
      * detect the objects currently in the scene.
      *
