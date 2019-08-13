@@ -158,8 +158,6 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
 
     auto new_objects = detect_objects(r);
 
-    bool occ = true;
-    float new_z = 0;
 
 
     for (auto &obj : new_objects) {
