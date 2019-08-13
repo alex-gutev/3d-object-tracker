@@ -206,6 +206,11 @@ public:
     cv::Mat& color() {
         return color_frame;
     }
+
+    const cv::Mat &color() const {
+        return color_frame;
+    }
+
     /**
      * @return The current depth video frame.
      */
@@ -247,7 +252,7 @@ public:
      *
      * @return The point in camera space.
      */
-    cv::Vec4f pixel_to_camera(float x, float y, float z);
+    cv::Vec4f pixel_to_camera(float x, float y, float z) const;
     /**
      * Transforms a point, on the view's frame image, to world space.
      *
@@ -255,7 +260,7 @@ public:
      *
      * @return The point in world space.
      */
-    cv::Vec4f pixel_to_world(float x, float y, float z);
+    cv::Vec4f pixel_to_world(float x, float y, float z) const;
 
     /**
      * Transforms a point from camera space to pixel space.
@@ -264,7 +269,7 @@ public:
      *
      * @return The pixel space point.
      */
-    cv::Vec4f camera_to_pixel(cv::Vec4f p);
+    cv::Vec4f camera_to_pixel(cv::Vec4f p) const;
 
     /**
      * Transforms a point from world space to pixel space.
@@ -273,7 +278,7 @@ public:
      *
      * @return The pixel space point.
      */
-    cv::Vec4f world_to_pixel(cv::Vec4f p);
+    cv::Vec4f world_to_pixel(cv::Vec4f p) const;
 
 
     /**
