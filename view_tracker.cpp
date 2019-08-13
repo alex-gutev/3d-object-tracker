@@ -329,7 +329,11 @@ void view_tracker::match_objects(std::vector<object> &new_objects, cv::Rect r) c
 
         for (auto old : objects) {
             float d = magnitude(old.pos - new_obj.pos);
-            float overlap = cv::countNonZero(old.region) / float(cv::countNonZero(new_obj.region));
+
+            float old_area = cv::countNonZero(old.region);
+            float new_area = cv::countNonZero(new_obj.region);
+            float overlap_area = cv::countNonZero(old.region & new_obj.region);
+            float overlap = overlap_area / new_area;
 
             // If there isn't significant overlap between the objects
             // then don't consider it a possible match
