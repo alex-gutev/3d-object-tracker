@@ -31,8 +31,6 @@
  */
 class view_tracker {
 public:
-    view_tracker();
-
     /* Accessors */
 
     /**
@@ -97,6 +95,7 @@ public:
      */
     void bandwidth(float h);
 
+
     /* Tracking */
 
     /**
@@ -110,6 +109,8 @@ public:
     float track(cv::Point3f predicted);
 
 private:
+    /* Model */
+
     /**
      * Stores the view parameters and reads the colour and depth frame
      * images.
@@ -132,6 +133,8 @@ private:
     double z_range;
 
 
+    /* Position State */
+
     /**
      * Tracking window rectangle.
      */
@@ -142,6 +145,8 @@ private:
      */
     float m_window_z;
 
+
+    /* Detected Objects */
 
     /**
      * Stores information about object detected within the tracking
@@ -215,41 +220,6 @@ private:
     std::vector<object> objects;
 
 
-    /**
-     * Bayesian Classifier used to determine whether the object is
-     * occluded.
-     */
-    cv::Ptr<cv::ml::NormalBayesClassifier> classifier;
-
-    /**
-     * Trains the occlusion classifier, with the depth values in the
-     * mask @a mask used as the training data.
-     *
-     * @param mask The mask indicating which pixels, in the tracking
-     *   window, belong to the object.
-     *
-     * @param depth The depth (z-coordinate) of the object's position.
-     */
-    void train_occlusion_classifier(cv::Mat mask, float depth);
-
-    /**
-     * Backprojects the colour histogram onto the colour frame image.
-     *
-     * @return A single-channel probability image in which each
-     *         pixel's value is the probability that it belongs to the
-     *         object.
-     */
-    cv::Mat backproject();
-
-    /**
-     * Computes a rough estimate of the area covered by the object,
-     * within the tracking window.
-     *
-     * @return The area covered in pixels.
-     */
-    float compute_area_covered();
-
-
     /* Occlusion Detection */
 
     /**
@@ -267,6 +237,16 @@ private:
     bool is_occluded(cv::Rect window, float z, cv::Point3f predicted);
 
     /**
+     * Segments the current frame image, within the region @a r, to
+     * detect the objects currently in the scene.
+     *
+     * @param r The region to segment.
+     *
+     * @return List of detected objects.
+     */
+    std::vector<object> detect_objects(cv::Rect r) const;
+
+    /**
      * Matches the objects detected in the previous frame, in the
      * 'objects' array, to the objects detected in the current frame,
      * in the array @a new_objects.
@@ -276,11 +256,29 @@ private:
      * object in the previous frame.
      *
      * @param new_objects Array of objects to be matched.
+     * @param r Region in which the new objects were detected.
      */
-    void match_objects(std::vector<object> &new_objects) const;
+    void match_objects(std::vector<object> &new_objects, cv::Rect r) const;
 
 
     /* Mean Shift Tracking */
+
+    /**
+     * Backprojects the colour histogram onto the colour frame image.
+     *
+     * @return A single-channel probability image in which each
+     *         pixel's value is the probability that it belongs to the
+     *         object.
+     */
+    cv::Mat backproject();
+
+    /**
+     * Computes a rough estimate of the area covered by the object,
+     * within the tracking window.
+     *
+     * @return The area covered in pixels.
+     */
+    float compute_area_covered();
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's

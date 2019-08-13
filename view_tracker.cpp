@@ -23,7 +23,7 @@
 
 #include "util.h"
 
-view_tracker::view_tracker() : classifier(cv::ml::NormalBayesClassifier::create()) {}
+// Initialization: Appearance and Depth Models ////////////////////////////////
 
 void view_tracker::build_model(cv::Mat mask) {
     int channels[] = {0};
@@ -62,20 +62,6 @@ void view_tracker::build_model(cv::Mat mask) {
     z_range = cv::abs(min - max) / 2;
 }
 
-void view_tracker::train_occlusion_classifier(cv::Mat mask, float depth) {
-    cv::Mat dimg = m_view.depth()(m_window);
-
-    dimg = m_view.disparity_to_depth(dimg) - depth;
-    mask = mask(m_window);
-
-    cv::Mat labels;
-
-    dimg.clone().convertTo(dimg, CV_32F);
-    mask.clone().convertTo(labels, CV_32S);
-
-    classifier->train(dimg.clone().reshape(0, dimg.total()),  cv::ml::ROW_SAMPLE, labels.reshape(0, labels.total()));
-}
-
 void view_tracker::estimate_bandwidth() {
     // Top-left corner of tracking window
     cv::Vec4f p1(m_window.x * m_window_z, m_window.y * m_window_z, m_window_z, 1);
@@ -100,6 +86,9 @@ void view_tracker::estimate_bandwidth() {
 void view_tracker::bandwidth(float value) {
     h = value;
 }
+
+
+// Tracking ///////////////////////////////////////////////////////////////////
 
 float view_tracker::track(cv::Point3f predicted) {
     // Backproject histogram onto colour image
@@ -166,53 +155,8 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
     r.x = clamp(r.x, 0, m_view.depth().size().width - r.width);
     r.y = clamp(r.y, 0, m_view.depth().size().height - r.height);
 
-    // Convert disparity map to depth map
-    cv::Mat dimg = m_view.disparity_to_depth(m_view.depth()(r));
-    cv::Mat img;
 
-    // Normalize depth map to range [0, 255] in order to perform MS clustering
-    cv::normalize(dimg, img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-
-    // Convert to 3-channel image for pyrMeanShiftFiltering function
-    cv::Mat channels[] = {img, img, img};
-    cv::merge(channels, 3, img);
-
-    // Perform Mean Shift Clustering
-    cv::pyrMeanShiftFiltering(img, img, 10, z_range);
-
-    // Extract single channel from clustered image
-    cv::Mat simg;
-    cv::extractChannel(img, simg, 0);
-
-    // Segment clustered image
-    cv::Mat seg;
-    size_t n = watershed(~simg, img, seg);
-
-    // Compute statistics of new objects in scene
-    std::vector<object> new_objects;
-
-    for (int i = 1; i < n; ++i) {
-        if (cv::countNonZero(seg == i)) {
-            auto median = percentile(dimg, 0.5, seg == i);
-
-            auto min = percentile(dimg, 0.5, seg == i);
-            auto max = percentile(dimg, 0.95, seg == i);
-
-            new_objects.emplace_back(object::type_unknown, min, max, median);
-            new_objects.back().region = seg == i;
-
-            cv::Mat points;
-            cv::findNonZero(seg == i, points);
-            cv::Rect box = cv::boundingRect(points);
-
-            auto pt = m_view.pixel_to_world(box.x + box.width/2.0f, box.y + box.height / 2.0f, median);
-
-            new_objects.back().pos = cv::Point3f(pt[0], pt[1], pt[2]);
-            new_objects.back().bounds = box;
-        }
-    }
-
-    match_objects(new_objects);
+    auto new_objects = detect_objects(r);
 
     bool occ = true;
     float new_z = 0;
@@ -271,6 +215,58 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
 }
 
 
+std::vector<view_tracker::object> view_tracker::detect_objects(cv::Rect r) const {
+    // Convert disparity map to depth map
+    cv::Mat dimg = m_view.disparity_to_depth(m_view.depth()(r));
+    cv::Mat img;
+
+    // Normalize depth map to range [0, 255] in order to perform MS clustering
+    cv::normalize(dimg, img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+
+    // Convert to 3-channel image for pyrMeanShiftFiltering function
+    cv::Mat channels[] = {img, img, img};
+    cv::merge(channels, 3, img);
+
+    // Perform Mean Shift Clustering
+    cv::pyrMeanShiftFiltering(img, img, 10, z_range);
+
+    // Extract single channel from clustered image
+    cv::Mat simg;
+    cv::extractChannel(img, simg, 0);
+
+    // Segment clustered image
+    cv::Mat seg;
+    size_t n = watershed(~simg, img, seg);
+
+    // Compute statistics of new objects in scene
+    std::vector<object> new_objects;
+
+    for (int i = 1; i < n; ++i) {
+        if (cv::countNonZero(seg == i)) {
+            auto median = percentile(dimg, 0.5, seg == i);
+
+            auto min = percentile(dimg, 0.5, seg == i);
+            auto max = percentile(dimg, 0.95, seg == i);
+
+            new_objects.emplace_back(object::type_unknown, min, max, median);
+            new_objects.back().region = seg == i;
+
+            cv::Mat points;
+            cv::findNonZero(seg == i, points);
+            cv::Rect box = cv::boundingRect(points);
+
+            auto pt = m_view.pixel_to_world(box.x + box.width/2.0f, box.y + box.height / 2.0f, median);
+
+            new_objects.back().pos = cv::Point3f(pt[0], pt[1], pt[2]);
+            new_objects.back().bounds = box;
+        }
+    }
+
+    match_objects(new_objects, r);
+
+    return new_objects;
+}
+
 /**
  * Stores information about the similarity between an object in the
  * previous frame and current frame.
@@ -302,7 +298,7 @@ struct matching {
         dist(dist), old(old), current(current) {}
 };
 
-void view_tracker::match_objects(std::vector<object> &new_objects) const {
+void view_tracker::match_objects(std::vector<object> &new_objects, cv::Rect r) const {
     std::vector<matching> pairs;
 
     // Compute distances between each pair of old and new objects.
