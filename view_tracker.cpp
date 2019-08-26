@@ -186,6 +186,23 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
 
     objects = std::move(new_objects);
 
+    // True if background region detected
+    bool detected_bg = false;
+    // Distance to closest background region
+    float min_bg = 0;
+
+    for (auto &obj : objects) {
+        if (obj.type == object::type_background) {
+            if (!detected_bg || obj.min < min_bg) {
+                detected_bg = true;
+                min_bg = obj.min;
+            }
+        }
+    }
+
+    if (detected_bg)
+        dist_background = min_bg;
+
     if (!occ) m_window_z = new_z;
     return occ;
 }

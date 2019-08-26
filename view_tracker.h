@@ -20,6 +20,7 @@
 #define VIEW_TRACKER_H
 
 #include <tuple>
+#include <math.h>
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/ml.hpp>
@@ -218,6 +219,14 @@ private:
      * previous frame.
      */
     std::vector<object> objects;
+
+    /**
+     * Distance to the background.
+     *
+     * Initially INFINITY representing that the distance to the
+     * background has not yet been determined.
+     */
+    float dist_background = INFINITY;
 
 
     /* Occlusion Detection */
