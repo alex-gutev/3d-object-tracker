@@ -182,7 +182,7 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
     bool occ = true;
     float new_z = 0;
 
-    std::tie(occ, new_z) = is_occluded(new_objects, z);
+    std::tie(occ, new_z) = is_occluded(new_objects, r, z);
 
     objects = std::move(new_objects);
 
@@ -190,14 +190,16 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
     return occ;
 }
 
-std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &objects, float z) const {
+std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &objects, cv::Rect window, float z) {
     bool occ = true;
     float new_z = 0;
 
-    float closest = -1;
+    int closest = -1;
     float closest_dist = 0;
 
     size_t i = 0;
+
+    cv::Mat points;
 
     for (auto &obj : objects) {
         // If object is an occluder and the z position found by
@@ -213,6 +215,8 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
         // If the object is part of the target, set new z-coordinate
         // to median depth of the object.
         if (obj.type == object::type_target) {
+            cv::findNonZero(obj.region, points);
+
             float d = cv::abs(z - obj.depth);
             if ((obj.min < z && z < obj.max) ||
                (d < z_range)) {
@@ -228,7 +232,15 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
         i++;
     }
 
-    if (!occ) new_z = objects[closest].depth;
+    if (!occ) {
+        cv::Rect r = cv::boundingRect(points);
+
+        m_window.x = (r.x + r.width/2) - window.width/2;
+        m_window.y = (r.y + r.height/2) - window.height/2;
+
+        // m_window = window;
+        new_z = objects[closest].depth;
+    }
 
     return std::make_pair(occ, new_z);
 }

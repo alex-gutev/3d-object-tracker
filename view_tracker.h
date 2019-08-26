@@ -240,14 +240,18 @@ private:
      * Determines whether the position found by mean shift is of an
      * occluding object or not.
      *
+     * Updates the current tracking window to be centred on the target
+     * object regions.
+     *
      * @param objects Objects detected in the current scene.
+     * @param window Window within which to check for occlusions.
      * @param z Z position found by MS tracker.
      *
      * @return A pair whether the first element is true if the
      *   position found is of an occluder. The second element is the
      *   z-coordinate of the target object.
      */
-    std::pair<bool, float> is_occluded(const std::vector<object> &objects, float z) const;
+    std::pair<bool, float> is_occluded(const std::vector<object> &objects, cv::Rect window, float z);
 
     /**
      * Segments the current frame image, within the region @a r, to
