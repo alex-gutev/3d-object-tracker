@@ -308,41 +308,38 @@ void view_tracker::merge_objects(cv::Mat img, std::vector<object> &objects) {
 std::vector<view_tracker::object> view_tracker::detect_objects(cv::Rect r) const {
     // Convert disparity map to depth map
     cv::Mat dimg = m_view.disparity_to_depth(m_view.depth()(r));
-    cv::Mat img;
+    cv::Mat img = m_view.depth()(r).clone();
 
-    // Normalize depth map to range [0, 255] in order to perform MS clustering
-    cv::normalize(dimg, img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+    // Segment depth map
 
-    // Convert to 3-channel image for pyrMeanShiftFiltering function
+    // Convert to 3-channel image for watershedding
     cv::Mat channels[] = {img, img, img};
     cv::merge(channels, 3, img);
 
-    // Perform Mean Shift Clustering
-    cv::pyrMeanShiftFiltering(img, img, 10, z_range);
-
-    // Extract single channel from clustered image
-    cv::Mat simg;
-    cv::extractChannel(img, simg, 0);
-
-    // Segment clustered image
+    // Mask of same size as depth map
+    cv::Mat fullseg = cv::Mat::zeros(m_view.depth().size(), CV_8U);
     cv::Mat seg;
-    size_t n = watershed(~simg, img, seg);
+
+    size_t n = watershed(m_view.depth()(r), img, seg);
+    seg.copyTo(fullseg(r));
 
     // Compute statistics of new objects in scene
     std::vector<object> new_objects;
 
     for (int i = 1; i < n; ++i) {
-        if (cv::countNonZero(seg == i)) {
-            auto median = percentile(dimg, 0.5, seg == i);
+        cv::Mat region = seg == i;
 
-            auto min = percentile(dimg, 0.5, seg == i);
-            auto max = percentile(dimg, 0.95, seg == i);
+        if (cv::countNonZero(region)) {
+            auto median = percentile(dimg, 0.5, region);
+
+            auto min = percentile(dimg, 0.05, region);
+            auto max = percentile(dimg, 0.95, region);
 
             new_objects.emplace_back(object::type_unknown, min, max, median);
-            new_objects.back().region = seg == i;
+            new_objects.back().region = fullseg == i;
 
             cv::Mat points;
-            cv::findNonZero(seg == i, points);
+            cv::findNonZero(region, points);
             cv::Rect box = cv::boundingRect(points);
 
             auto pt = m_view.pixel_to_world(box.x + box.width/2.0f, box.y + box.height / 2.0f, median);
