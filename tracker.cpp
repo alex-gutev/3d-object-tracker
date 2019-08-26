@@ -342,6 +342,11 @@ float tracker::track(size_t index) {
             kmfilter.statePre.at<float>(0),
             kmfilter.statePre.at<float>(1),
             kmfilter.statePre.at<float>(2)
+        },
+        {
+            kmfilter.statePre.at<float>(3),
+            kmfilter.statePre.at<float>(4),
+            kmfilter.statePre.at<float>(5)
         });
 
     return weight;

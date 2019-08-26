@@ -103,11 +103,12 @@ public:
      * Track the object in the current frame.
      *
      * @param predicted The predicted position.
+     * @param velocity Predicted object velocity.
      *
      * @return A weight indicating the estimated accuracy of the
      *   tracked position.
      */
-    float track(cv::Point3f predicted);
+    float track(cv::Point3f predicted, cv::Vec3f velocity);
 
 private:
     /* Model */
@@ -273,6 +274,16 @@ private:
     std::vector<object> detect_objects(cv::Rect r) const;
 
     /**
+     * Merge objects with overlapping z ranges.
+     *
+     * @param img Image containing actual depth value.
+     *
+     * @param objects Array of objects to be merged. This array is
+     *     modified in place.
+     */
+    static void merge_objects(cv::Mat img, std::vector<object> &objects);
+
+    /**
      * Matches the objects detected in the previous frame, in the
      * 'objects' array, to the objects detected in the current frame,
      * in the array @a new_objects.
@@ -286,6 +297,24 @@ private:
      */
     void match_objects(std::vector<object> &new_objects, cv::Rect r) const;
 
+
+    /* Detecting Re-emergence */
+
+    /**
+     * Determines whether the predicted window is still at the
+     * occluding object.
+     *
+     * If the target object is detected within the predicted window,
+     * the current tracking window is centred at the target regions.
+     *
+     * @param p Predicted 2D position of the object.
+     * @param v 3D object velocity.
+     *
+     * @return True if the predicted window has passed the occluder or
+     *     the target object has been re-detected. False if the
+     *     tracking window is still centred on the occluding object.
+     */
+    bool check_passed_occluder(cv::Point p, cv::Vec3f v);
 
     /* Mean Shift Tracking */
 

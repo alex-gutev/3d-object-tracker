@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <numeric>
 
+#include <opencv2/ximgproc.hpp>
+
 #include "util.h"
 
 // Initialization: Appearance and Depth Models ////////////////////////////////
@@ -90,7 +92,7 @@ void view_tracker::bandwidth(float value) {
 
 // Tracking ///////////////////////////////////////////////////////////////////
 
-float view_tracker::track(cv::Point3f predicted) {
+float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     // Backproject histogram onto colour image
     cv::Mat pimg = backproject();
 
@@ -110,12 +112,14 @@ float view_tracker::track(cv::Point3f predicted) {
     std::tie(new_window, new_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
 
     if (!is_occluded(new_window, new_z, predicted)) {
-        m_window = new_window;
-
         return weight;
     }
 
     cv::Vec4f pixel = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
+
+    if (check_passed_occluder(cv::Point(pixel[0], pixel[1]), velocity)) {
+        return weight;
+    }
 
     m_window = cv::Rect(pixel[0] - m_window.width / 2, pixel[1] - m_window.height / 2,
                         m_window.width, m_window.height);
@@ -263,6 +267,44 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
 }
 
 
+void view_tracker::merge_objects(cv::Mat img, std::vector<object> &objects) {
+    // Sort in order of minimum depth value
+    std::sort(objects.begin(), objects.end(), [=] (const object &a, const object & b) {
+        return a.min < b.min;
+    });
+
+    // Last object that was retained
+    object *old = nullptr;
+
+    // Iterate through object array
+    auto it = objects.begin();
+    while (it != objects.end()) {
+        auto &obj = *it;
+
+        if (!old) {
+            old = &*it;
+        }
+        else if (old->min <= obj.depth && obj.depth <= old->max) {
+            // Merge regions
+            old->region |= obj.region;
+
+            // Recompute depth statistics
+            old->min = percentile(img, 0.05, old->region);
+            old->max = percentile(img, 0.95, old->region);
+            old->depth = percentile(img, 0.5, old->region);
+
+            // Remove current object
+            it = objects.erase(it);
+            continue;
+        }
+        else {
+            old = &obj;
+        }
+
+        ++it;
+    }
+}
+
 std::vector<view_tracker::object> view_tracker::detect_objects(cv::Rect r) const {
     // Convert disparity map to depth map
     cv::Mat dimg = m_view.disparity_to_depth(m_view.depth()(r));
@@ -401,6 +443,91 @@ void view_tracker::match_objects(std::vector<object> &new_objects, cv::Rect r) c
             pairs.end()
             );
     }
+}
+
+
+// Detecting Re-emergence /////////////////////////////////////////////////////
+
+bool view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
+    // Previous object position in 3D world space
+    cv::Vec4f p3 = m_view.pixel_to_world(m_window.x + m_window.width/2, m_window.y + m_window.height / 2, m_window_z);
+
+    // Shift in x-y plane by x and y velocity components.
+    // Ignore velocity in z axis.
+    p3[0] += v[0];
+    p3[1] += v[1];
+
+    p3 = m_view.world_to_pixel(p3);
+
+
+    // Predicted tracking window
+    cv::Rect r(p3[0] - m_window.width/2, p3[1] - m_window.height/2, m_window.width, m_window.height);
+    r = clamp_region(r, m_view.depth().size());
+
+
+    // Segment region
+    auto ed = cv::ximgproc::segmentation::createGraphSegmentation();
+
+    cv::Mat seg;
+    ed->processImage(m_view.depth()(r), seg);
+
+    // Determine number of regions
+    double max;
+    cv::minMaxIdx(seg, nullptr, &max);
+    size_t n = max + 1;
+
+    // Compute statistics of new objects in scene
+    std::vector<object> objs;
+
+    cv::Mat dimg = m_view.disparity_to_depth(m_view.depth())(r);
+
+    for (int i = 0; i < n; ++i) {
+        cv::Mat region = seg == i;
+
+        if (cv::countNonZero(region)) {
+            auto median = percentile(dimg, 0.5, region);
+
+            auto min = percentile(dimg, 0.05, region);
+            auto max = percentile(dimg, 0.95, region);
+
+            objs.emplace_back(object::type_unknown, min, max, median);
+            objs.back().region = region;
+        }
+    }
+
+    merge_objects(dimg, objs);
+
+    // Flag: True if target object was found
+    bool found_object = false;
+    // Target object z position
+    float new_z;
+    // Target object region points
+    cv::Mat obj_points;
+
+    for (auto & obj : objs) {
+        if ((obj.min < m_window_z && m_window_z < obj.max) ||
+            cv::abs(m_window_z - obj.depth) < cv::abs(dist_background - obj.depth)) {
+
+            cv::findNonZero(obj.region, obj_points);
+
+            if (!found_object || obj.depth < new_z) {
+                found_object = true;
+                new_z = obj.depth;
+            }
+        }
+    // If target region was found
+    if (found_object) {
+        m_window_z = new_z;
+
+        cv::Rect newr = cv::boundingRect(obj_points);
+
+        m_window.x = (r.x + newr.x + newr.width/2) - m_window.width/2;
+        m_window.y = (r.y + newr.y + newr.height/2) - m_window.height/2;
+
+        return true;
+    }
+
+    return false;
 }
 
 
