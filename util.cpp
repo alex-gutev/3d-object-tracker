@@ -50,6 +50,19 @@ cv::Rect clamp_region(cv::Rect r, cv::Size size) {
     return r;
 }
 
+cv::Rect clamp_rect(cv::Rect r, cv::Size size) {
+    cv::Point tl(r.x, r.y);
+    cv::Point br(r.x + r.width, r.y + r.height);
+
+    tl.x = clamp(tl.x, 0, size.width - 1);
+    tl.y = clamp(tl.y, 0, size.height - 1);
+
+    br.x = clamp(br.x, 1, size.width);
+    br.y = clamp(br.y, 1, size.height);
+
+    return cv::Rect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+}
+
 cv::Mat compute_lbp(cv::Mat img, int ksize) {
     auto size = img.size();
     cv::Mat out = cv::Mat::zeros(size, CV_32SC1);

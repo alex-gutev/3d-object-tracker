@@ -407,14 +407,17 @@ std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::R
         float sum_y = 0;
         float sum_z = 0;
 
+        // Rectangle clamped to visible image
+        cv::Rect r = clamp_rect(window, pimg.size());
+
         // Number of rows and columns
-        int rows = std::min(window.y + window.height, pimg.rows);
-        int cols = std::min(window.x + window.width, pimg.cols);
+        int rows = std::min(r.y + r.height, pimg.rows);
+        int cols = std::min(r.x + r.width, pimg.cols);
 
 #ifdef FYP_TRACKER_PARALLEL
 #pragma omp parallel for reduction(+ : weights, sum_x, sum_y, sum_z)
 #endif
-        for (int y = window.y; y < rows; y++) {
+        for (int y = r.y; y < rows; y++) {
             // Pointer to the current row of the probability image
             const uchar *prob_row = pimg.ptr(y);
             // Pointer to the current row of the depth image
@@ -431,7 +434,7 @@ std::pair<cv::Rect, float> view_tracker::mean_shift(cv::Mat pimg, view &v, cv::R
 #ifdef FYP_TRACKER_PARALLEL
 #pragma omp parallel for reduction(+ : row_weights, row_sum_x, row_sum_y, row_sum_z)
 #endif
-            for (int x = window.x; x < cols; x++) {
+            for (int x = r.x; x < cols; x++) {
                 // Get probability
                 float prob = prob_row[x] / 255.0f;
 

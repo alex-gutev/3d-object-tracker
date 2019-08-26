@@ -49,6 +49,22 @@ T clamp(T x, T min, T max) {
 cv::Rect clamp_region(cv::Rect r, cv::Size size);
 
 /**
+ * Clamps a rectangle to an image with origin at (0,0) and a given
+ * size.
+ *
+ * This differs from clamp_region in that the rectangle returned only
+ * covers the portion of @a r that is actually within the visible
+ * image. If part of @a r falls outside the image, then the rectangle,
+ * returned, is smaller than @a r.
+ *
+ * @param r The rectangle to clamp.
+ * @param size The size of the image.
+ *
+ * @return The clamped rectangle.
+ */
+cv::Rect clamp_rect(cv::Rect r, cv::Size size);
+
+/**
  * Computes the linear binary pattern of @a img.
  *
  * @param img Image of which to compute the LBP.
