@@ -512,6 +512,8 @@ bool view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
                 new_z = obj.depth;
             }
         }
+    }
+
     // If target region was found
     if (found_object) {
         m_window_z = new_z;
