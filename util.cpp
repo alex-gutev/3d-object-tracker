@@ -67,9 +67,9 @@ cv::Mat compute_lbp(cv::Mat img, int ksize) {
     auto size = img.size();
     cv::Mat out = cv::Mat::zeros(size, CV_32SC1);
 
-    for (size_t y = 0; y < size.height - ksize; y += ksize) {
-        for (size_t x = 0; x < size.width - ksize; x += ksize) {
-            cv::Mat block = cv::Mat::zeros(cv::Size(ksize, ksize), CV_8UC1);
+    for (size_t y = 0; y < size.height - ksize; y++) {
+        for (size_t x = 0; x < size.width - ksize; x++) {
+            cv::Mat block = cv::Mat::zeros(cv::Size(ksize, ksize), img.type());
 
             int bx = std::max(ksize / 2 - (int)x, 0);
             int by = std::max(ksize / 2 - (int)y, 0);
@@ -78,7 +78,7 @@ cv::Mat compute_lbp(cv::Mat img, int ksize) {
 
             // std::cout << block << std::endl;
 
-            auto threshold = block.at<unsigned char>(ksize / 2, ksize / 2);
+            auto threshold = block.at<float>(ksize / 2, ksize / 2);
 
             cv::threshold(block, block, threshold, 1, cv::THRESH_BINARY);
 
