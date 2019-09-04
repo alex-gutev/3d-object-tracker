@@ -65,6 +65,11 @@ void tracker_app::display_regions() {
         cv::addWeighted(track.color(i), 0.5, region, 0.5, 0.0, img);
 
         cv::imshow(windows[i], img);
+
+        auto w = track.track_window(i);
+
+        std::cout << w.x << ", " << w.y << ", " << w.width << ", " << w.height << "\n";
+
         i++;
     }
 }
@@ -87,8 +92,12 @@ bool tracker_app::track_next() {
 
 void tracker_app::display_track_windows() {
     for (int i = 0; i < windows.size(); i++) {
-        cv::rectangle(images[i], track.track_window(i), cv::Scalar(0,0,255), 5);
+        auto w = track.track_window(i);
+
+        cv::rectangle(images[i], w, cv::Scalar(0,0,255), 5);
         cv::imshow(windows[i], images[i]);
+
+        std::cout << w.x << ", " << w.y << std::endl;
     }
 }
 
