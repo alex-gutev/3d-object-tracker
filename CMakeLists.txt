@@ -14,16 +14,16 @@ if(OPENMP_FOUND)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-option(2D_TRACKER "Compile with OpenCV's 2D mean-shift tracker" OFF)
 option(PARALLEL "Compile parallelised 3D tracker" ON)
-
-if(TRACKER_2D)
-    add_definitions(-DFYP_TRACKER_2D)
-endif()
+option(ADAPTIVE_Z_RANGE "Compile with adaptive Z Range" ON)
 
 if(PARALLEL)
     add_definitions(-DFYP_TRACKER_PARALLEL)
 endif()
+
+if(ADAPTIVE_Z_RANGE)
+  add_definitions(-DADAPTIVE_Z_RANGE)
+endif(ADAPTIVE_Z_RANGE)
 
 add_executable(tracker
   main.cpp

@@ -62,6 +62,11 @@ void view_tracker::build_model(cv::Mat mask) {
     max = m_view.disparity_to_depth(max);
 
     z_range = cv::abs(min - max) / 2;
+
+#ifdef ADAPTIVE_Z_RANGE
+    init_kf_range();
+    init_kf_state(max, min);
+#endif
 }
 
 void view_tracker::estimate_bandwidth() {
@@ -89,19 +94,42 @@ void view_tracker::bandwidth(float value) {
     h = value;
 }
 
+#ifdef ADAPTIVE_Z_RANGE
+
+void view_tracker::init_kf_range() {
+    kf_range.transitionMatrix = cv::Mat::eye(2, 2, CV_32F);
+    kf_range.measurementMatrix = cv::Mat::eye(2, 2, CV_32F);
+
+    kf_range.processNoiseCov = 1e-5 * cv::Mat::eye(2, 2, CV_32F);
+    kf_range.measurementNoiseCov = 1e-1 * cv::Mat::eye(2, 2, CV_32F);
+}
+
+void view_tracker::init_kf_state(float min, float max) {
+    kf_range.statePost = cv::Mat::zeros(2, 1, CV_32F);
+
+    kf_range.statePost.at<float>(0) = min;
+    kf_range.statePost.at<float>(1) = max;
+
+    kf_range.errorCovPost = 0.1 * cv::Mat::eye(2, 2, CV_32F);
+}
+
+cv::Mat view_tracker::kf_range_correct(float min, float max) {
+    cv::Mat m(2, 1, CV_32F);
+
+    m.at<float>(0) = min;
+    m.at<float>(1) = max;
+
+    return kf_range.correct(m);
+}
+
+#endif
+
 
 // Tracking ///////////////////////////////////////////////////////////////////
 
 float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     // Backproject histogram onto colour image
     cv::Mat pimg = backproject();
-
-#ifdef FYP_TRACKER_2D
-    // Perform 2D mean shift
-    cv::meanShift(pimg, window, cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 10, 1));
-    return 0;
-
-#else
 
     float weight = compute_area_covered();
 
@@ -126,7 +154,6 @@ float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     m_window_z = pixel[2];
 
     return 0;
-#endif
 }
 
 float view_tracker::compute_area_covered() {
@@ -220,6 +247,11 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
 
     size_t i = 0;
 
+#ifdef ADAPTIVE_Z_RANGE
+    /* Target Object Region Mask */
+    cv::Mat mask = cv::Mat::zeros(m_view.depth().size(), CV_8UC1);
+#endif
+
     cv::Mat points;
 
     for (auto &obj : objects) {
@@ -237,6 +269,10 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
         // to median depth of the object.
         if (obj.type == object::type_target) {
             cv::findNonZero(obj.region, points);
+
+#ifdef ADAPTIVE_Z_RANGE
+            mask = mask | obj.region;
+#endif
 
             float d = cv::abs(z - obj.depth);
             if ((obj.min < z && z < obj.max) ||
@@ -259,8 +295,21 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
         m_window.x = (r.x + r.width/2) - window.width/2;
         m_window.y = (r.y + r.height/2) - window.height/2;
 
-        // m_window = window;
         new_z = objects[closest].depth;
+
+#ifdef ADAPTIVE_Z_RANGE
+        /* Update Z Range */
+
+        cv::Mat dimg = m_view.disparity_to_depth(m_view.depth());
+
+        float min = percentile(dimg, 0.5, mask);
+        float max = percentile(dimg, 0.95, mask);
+
+        kf_range.predict();
+        cv::Mat range = kf_range_correct(min, max);
+
+        z_range = (range.at<float>(1) - range.at<float>(0)) / 2;
+#endif
     }
 
     return std::make_pair(occ, new_z);

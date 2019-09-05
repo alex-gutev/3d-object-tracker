@@ -147,6 +147,38 @@ private:
      */
     float m_window_z;
 
+#ifdef ADAPTIVE_Z_RANGE
+    /* Z Range Kalman Filter */
+
+    /**
+     * Z Range Kalman Filter
+     *
+     * State: [Min, Max]
+     */
+    cv::KalmanFilter kf_range{2, 2};
+
+    /**
+     * Initializes the Z Range Kalman Filter parameters.
+     */
+    void init_kf_range();
+
+    /**
+     * Sets the initial state of the Z Range Kalman Filter.
+     *
+     * @param min Minimum Z.
+     * @param max Maximum Z.
+     */
+    void init_kf_state(float min, float max);
+
+    /**
+     * Performs the update step of the Z Range Kalman Filter using a
+     * measurement.
+     *
+     * @param min Measured minimum.
+     * @param max Measured maximum.
+     */
+    cv::Mat kf_range_correct(float min, float max);
+#endif
 
     /* Detected Objects */
 
