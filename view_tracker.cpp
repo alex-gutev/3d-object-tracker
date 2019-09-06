@@ -139,8 +139,8 @@ float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     // Perform 3D mean-shift
     std::tie(new_window, new_z) = mean_shift(pimg, m_view, m_window, m_window_z, 10, 1e-6, h);
 
-    if (!is_occluded(new_window, new_z, predicted)) {
-        return weight;
+    if (size_t area = object_area(new_window, new_z, predicted)) {
+        return area;
     }
 
     cv::Vec4f pixel = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
@@ -179,7 +179,7 @@ float view_tracker::compute_area_covered() {
 
 // Occlusion Detection ////////////////////////////////////////////////////////
 
-bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
+size_t view_tracker::object_area(cv::Rect r, float z, cv::Point3f predicted) {
     cv::Vec4f p = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
     float pz = p[2];
 
@@ -188,8 +188,6 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
 
 
     auto new_objects = detect_objects(r);
-
-
 
     for (auto &obj : new_objects) {
         // If the object's type has not already been determined,
@@ -210,10 +208,10 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
         }
     }
 
-    bool occ = true;
+    size_t area;
     float new_z = 0;
 
-    std::tie(occ, new_z) = is_occluded(new_objects, r, z);
+    std::tie(area, new_z) = is_occluded(new_objects, r, z);
 
     objects = std::move(new_objects);
 
@@ -234,11 +232,11 @@ bool view_tracker::is_occluded(cv::Rect r, float z, cv::Point3f predicted) {
     if (detected_bg)
         dist_background = min_bg;
 
-    if (!occ) m_window_z = new_z;
-    return occ;
+    if (area) m_window_z = new_z;
+    return area;
 }
 
-std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &objects, cv::Rect window, float z) {
+std::pair<size_t, float> view_tracker::is_occluded(const std::vector<object> &objects, cv::Rect window, float z) {
     bool occ = true;
     float new_z = 0;
 
@@ -247,11 +245,8 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
 
     size_t i = 0;
 
-#ifdef ADAPTIVE_Z_RANGE
     /* Target Object Region Mask */
     cv::Mat mask = cv::Mat::zeros(m_view.depth().size(), CV_8UC1);
-#endif
-
     cv::Mat points;
 
     for (auto &obj : objects) {
@@ -270,9 +265,7 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
         if (obj.type == object::type_target) {
             cv::findNonZero(obj.region, points);
 
-#ifdef ADAPTIVE_Z_RANGE
             mask = mask | obj.region;
-#endif
 
             float d = cv::abs(z - obj.depth);
             if ((obj.min < z && z < obj.max) ||
@@ -288,6 +281,8 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
 
         i++;
     }
+
+    int area = cv::countNonZero(mask);
 
     if (!occ) {
         cv::Rect r = cv::boundingRect(points);
@@ -312,7 +307,7 @@ std::pair<bool, float> view_tracker::is_occluded(const std::vector<object> &obje
 #endif
     }
 
-    return std::make_pair(occ, new_z);
+    return std::make_pair(!occ ? area : 0, new_z);
 }
 
 

@@ -265,7 +265,10 @@ private:
     /* Occlusion Detection */
 
     /**
-     * Determines whether the object is occluded in the current frame.
+     * Determines the amount of object area within the tracking
+     * window.
+     *
+     * Additionally populates the objects array.
      *
      * @param window The tracking window
      *
@@ -274,9 +277,9 @@ private:
      *
      * @param predicted The predicted position of the object.
      *
-     * @return True if the object is occluded, false otherwise.
+     * @return The object area. If 0 then the object is occluded.
      */
-    bool is_occluded(cv::Rect window, float z, cv::Point3f predicted);
+    size_t object_area(cv::Rect window, float z, cv::Point3f predicted);
 
     /**
      * Determines whether the position found by mean shift is of an
@@ -289,11 +292,12 @@ private:
      * @param window Window within which to check for occlusions.
      * @param z Z position found by MS tracker.
      *
-     * @return A pair whether the first element is true if the
-     *   position found is of an occluder. The second element is the
-     *   z-coordinate of the target object.
+     * @return A pair whether the first element is the object area
+     *   within the tracking window, which is 0 if the object is
+     *   occluded. The second element is the z-coordinate of the
+     *   target object.
      */
-    std::pair<bool, float> is_occluded(const std::vector<object> &objects, cv::Rect window, float z);
+    std::pair<size_t, float> is_occluded(const std::vector<object> &objects, cv::Rect window, float z);
 
     /**
      * Segments the current frame image, within the region @a r, to
