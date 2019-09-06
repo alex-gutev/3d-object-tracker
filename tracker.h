@@ -69,6 +69,16 @@ class tracker {
      */
     int track_view;
 
+
+    /**
+     * Kalman filter process noise.
+     */
+    static constexpr float process_noise = 1e-5;
+    /**
+     * Kalman filter measurement noise.
+     */
+    static constexpr float measurement_noise = 1e-1;
+
     /**
      * Kalman filter with six state variables:
      *

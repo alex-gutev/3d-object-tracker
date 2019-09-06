@@ -210,8 +210,8 @@ void tracker::init_kalman_filter() {
 
     // Initialize Process and Measurement Noise Covariance Matrices
 
-    kmfilter.processNoiseCov = 1e-5 * cv::Mat::eye(6, 6, CV_32F);
-    kmfilter.measurementNoiseCov = 1e-1 * cv::Mat::eye(6, 6, CV_32F);
+    kmfilter.processNoiseCov = process_noise * cv::Mat::eye(6, 6, CV_32F);
+    kmfilter.measurementNoiseCov = measurement_noise * cv::Mat::eye(6, 6, CV_32F);
 }
 
 void tracker::init_kalman_state(float x, float y, float z) {
