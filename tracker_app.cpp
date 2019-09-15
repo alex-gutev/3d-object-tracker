@@ -98,7 +98,18 @@ void tracker_app::display_track_windows() {
         cv::imshow(windows[i], images[i]);
 
         std::cout << w.x << ", " << w.y << std::endl;
+
+        if (write_img) {
+            std::string name("f");
+            name += std::to_string(i);
+            name += std::to_string(frame);
+            name += ".jpg";
+
+            cv::imwrite(name, images[i]);
+        }
     }
+
+    frame++;
 }
 
 
@@ -232,5 +243,8 @@ void tracker_app::parse_args(int argc, char **argv) {
 
         // Perform object detection in the tracking window
         detect_objects(view, true);
+
+        // Set flag enabling saving of frame images
+        write_img = true;
     }
 }
