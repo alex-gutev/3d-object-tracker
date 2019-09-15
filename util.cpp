@@ -141,6 +141,9 @@ double percentile(cv::Mat img, double percent, cv::Mat mask) {
 
     cv::minMaxIdx(img, &min, &max);
 
+    if ((float)min == (float)max)
+        return min;
+
     int channels[] = {0};
     int histSize[] = {256};
     float hranges[] = {(float)min, (float)max};
