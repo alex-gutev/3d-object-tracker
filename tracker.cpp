@@ -305,11 +305,6 @@ void tracker::estimate_bandwidth() {
 /// Tracking
 
 void tracker::track() {
-#ifdef FYP_TRACKER_2D
-    for (int i = 0; i < window.size(); i++) {
-        track(i);
-    }
-#else
     kalman_predict();
 
     cv::Vec4f pos({0,0,0,0});
@@ -333,8 +328,6 @@ void tracker::track() {
 
         update_windows();
     }
-
-#endif
 }
 
 float tracker::track(size_t index) {
