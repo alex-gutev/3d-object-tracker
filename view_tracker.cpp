@@ -131,8 +131,6 @@ float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     // Backproject histogram onto colour image
     cv::Mat pimg = backproject();
 
-    float weight = compute_area_covered();
-
     cv::Rect new_window;
     float new_z;
 
@@ -145,8 +143,8 @@ float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
 
     cv::Vec4f pixel = m_view.world_to_pixel(cv::Vec4f(predicted.x, predicted.y, predicted.z));
 
-    if (check_passed_occluder(cv::Point(pixel[0], pixel[1]), velocity)) {
-        return weight;
+    if (size_t area = check_passed_occluder(cv::Point(pixel[0], pixel[1]), velocity)) {
+        return area;
     }
 
     m_window = cv::Rect(pixel[0] - m_window.width / 2, pixel[1] - m_window.height / 2,
@@ -154,26 +152,6 @@ float view_tracker::track(cv::Point3f predicted, cv::Vec3f velocity) {
     m_window_z = pixel[2];
 
     return 0;
-}
-
-float view_tracker::compute_area_covered() {
-    auto size = m_view.depth().size();
-
-    cv::Rect r = clamp_region(
-        cv::Rect(
-            m_window.x - m_window.width / 2,
-            m_window.y - m_window.height / 2,
-            m_window.width *2,
-            m_window.height *2
-            ),
-        size);
-
-    cv::Mat img = m_view.disparity_to_depth(m_view.depth()(r));
-
-//    cv::threshold(img, img, m_window_z - z_range, 1, cv::THRESH_TOZERO);
-    cv::threshold(img, img, m_window_z + z_range, 1, cv::THRESH_TOZERO_INV);
-
-    return cv::countNonZero(img);
 }
 
 
@@ -247,7 +225,6 @@ std::pair<size_t, float> view_tracker::is_occluded(const std::vector<object> &ob
 
     /* Target Object Region Mask */
     cv::Mat mask = cv::Mat::zeros(m_view.depth().size(), CV_8UC1);
-    cv::Mat points;
 
     for (auto &obj : objects) {
         // If object is an occluder and the z position found by
@@ -263,8 +240,6 @@ std::pair<size_t, float> view_tracker::is_occluded(const std::vector<object> &ob
         // If the object is part of the target, set new z-coordinate
         // to median depth of the object.
         if (obj.type == object::type_target) {
-            cv::findNonZero(obj.region, points);
-
             mask = mask | obj.region;
 
             float d = cv::abs(z - obj.depth);
@@ -282,7 +257,11 @@ std::pair<size_t, float> view_tracker::is_occluded(const std::vector<object> &ob
         i++;
     }
 
-    int area = cv::countNonZero(mask);
+    cv::Mat points;
+
+    cv::findNonZero(mask, points);
+
+    int area = points.total();
 
     if (!occ) {
         cv::Rect r = cv::boundingRect(points);
@@ -371,19 +350,23 @@ std::vector<view_tracker::object> view_tracker::detect_objects(cv::Rect r) const
     std::vector<object> new_objects;
 
     for (int i = 1; i < n; ++i) {
+        cv::Mat full_region = cv::Mat::zeros(fullseg.size(), fullseg.type());
         cv::Mat region = seg == i;
 
-        if (cv::countNonZero(region)) {
+        region.copyTo(full_region(r));
+
+        cv::Mat points;
+        cv::findNonZero(region, points);
+
+        if (!points.empty()) {
             auto median = percentile(dimg, 0.5, region);
 
             auto min = percentile(dimg, 0.05, region);
             auto max = percentile(dimg, 0.95, region);
 
             new_objects.emplace_back(object::type_unknown, min, max, median);
-            new_objects.back().region = fullseg == i;
+            new_objects.back().region = full_region;
 
-            cv::Mat points;
-            cv::findNonZero(region, points);
             cv::Rect box = cv::boundingRect(points);
 
             auto pt = m_view.pixel_to_world(box.x + box.width/2.0f, box.y + box.height / 2.0f, median);
@@ -442,7 +425,6 @@ void view_tracker::match_objects(std::vector<object> &new_objects, cv::Rect r) c
         for (auto old : objects) {
             float d = magnitude(old.pos - new_obj.pos);
 
-            float old_area = cv::countNonZero(old.region);
             float new_area = cv::countNonZero(new_obj.region);
             float overlap_area = cv::countNonZero(old.region & new_obj.region);
             float overlap = overlap_area / new_area;
@@ -489,7 +471,7 @@ void view_tracker::match_objects(std::vector<object> &new_objects, cv::Rect r) c
 
 // Detecting Re-emergence /////////////////////////////////////////////////////
 
-bool view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
+size_t view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
     // Previous object position in 3D world space
     cv::Vec4f p3 = m_view.pixel_to_world(m_window.x + m_window.width/2, m_window.y + m_window.height / 2, m_window_z);
 
@@ -542,14 +524,16 @@ bool view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
     bool found_object = false;
     // Target object z position
     float new_z;
-    // Target object region points
-    cv::Mat obj_points;
+
+    // Target object mask
+    cv::Mat obj_mask = cv::Mat::zeros(r.size(), CV_8UC1);
 
     for (auto & obj : objs) {
-        if ((obj.min < m_window_z && m_window_z < obj.max) ||
-            cv::abs(m_window_z - obj.depth) < cv::abs(dist_background - obj.depth)) {
+        if ((obj.max >= m_window_z) &&
+            ((obj.min < m_window_z && m_window_z < obj.max) ||
+             cv::abs(m_window_z - obj.depth) < cv::abs(dist_background - obj.depth))) {
 
-            cv::findNonZero(obj.region, obj_points);
+            obj_mask |= obj.region;
 
             if (!found_object || obj.depth < new_z) {
                 found_object = true;
@@ -562,15 +546,18 @@ bool view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
     if (found_object) {
         m_window_z = new_z;
 
+        cv::Mat obj_points;
+        cv::findNonZero(obj_mask, obj_points);
+
         cv::Rect newr = cv::boundingRect(obj_points);
 
         m_window.x = (r.x + newr.x + newr.width/2) - m_window.width/2;
         m_window.y = (r.y + newr.y + newr.height/2) - m_window.height/2;
 
-        return true;
+        return cv::countNonZero(obj_points.total());
     }
 
-    return false;
+    return 0;
 }
 
 

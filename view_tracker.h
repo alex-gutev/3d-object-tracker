@@ -346,11 +346,9 @@ private:
      * @param p Predicted 2D position of the object.
      * @param v 3D object velocity.
      *
-     * @return True if the predicted window has passed the occluder or
-     *     the target object has been re-detected. False if the
-     *     tracking window is still centred on the occluding object.
+     * @return The covered object area.
      */
-    bool check_passed_occluder(cv::Point p, cv::Vec3f v);
+    size_t check_passed_occluder(cv::Point p, cv::Vec3f v);
 
     /* Mean Shift Tracking */
 
@@ -362,14 +360,6 @@ private:
      *         object.
      */
     cv::Mat backproject();
-
-    /**
-     * Computes a rough estimate of the area covered by the object,
-     * within the tracking window.
-     *
-     * @return The area covered in pixels.
-     */
-    float compute_area_covered();
 
     /**
      * Performs 3D Mean Shift in the point-cloud space of view @a v's
