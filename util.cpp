@@ -24,6 +24,13 @@
 
 #include "util.h"
 
+/**
+ * Interprets the elements of a matrix as the bits of a number.
+ *
+ * @param m The matrix
+ *
+ * @return The resulting numeric value.
+ */
 static unsigned int mat_as_num(cv::Mat m) {
     unsigned int value = 0;
 
@@ -39,6 +46,7 @@ static unsigned int mat_as_num(cv::Mat m) {
 
     return value;
 }
+
 
 cv::Rect clamp_region(cv::Rect r, cv::Size size) {
     r.x = clamp(r.x, 0, size.width - 1);
@@ -141,6 +149,7 @@ double percentile(cv::Mat img, double percent, cv::Mat mask) {
 
     cv::minMaxIdx(img, &min, &max);
 
+    // If the range is empty simply return the minimum
     if ((float)min == (float)max)
         return min;
 

@@ -278,6 +278,7 @@ void tracker::update_window(int view, cv::Vec4f pos) {
     tracker.window_z(c[2]);
 }
 
+
 /// Colour Histogram
 
 void tracker::build_models() {
@@ -301,6 +302,7 @@ void tracker::estimate_bandwidth() {
 
     init_kalman_state(p[0], p[1], p[2]);
 }
+
 
 /// Tracking
 

@@ -292,7 +292,7 @@ private:
      * @param window Window within which to check for occlusions.
      * @param z Z position found by MS tracker.
      *
-     * @return A pair whether the first element is the object area
+     * @return A pair where the first element is the object area
      *   within the tracking window, which is 0 if the object is
      *   occluded. The second element is the z-coordinate of the
      *   target object.
@@ -320,9 +320,9 @@ private:
     static void merge_objects(cv::Mat img, std::vector<object> &objects);
 
     /**
-     * Matches the objects detected in the previous frame, in the
-     * 'objects' array, to the objects detected in the current frame,
-     * in the array @a new_objects.
+     * Matches the objects detected in the previous frame, stored in
+     * the 'objects' array, to the objects detected in the current
+     * frame, in the array @a new_objects.
      *
      * For each object, in @a new_objects, which is matched to an
      * object in the previous frame, its type is set to that of the
@@ -346,9 +346,10 @@ private:
      * @param p Predicted 2D position of the object.
      * @param v 3D object velocity.
      *
-     * @return The covered object area.
+     * @return The covered object area, 0 if still at the occluder.
      */
     size_t check_passed_occluder(cv::Point p, cv::Vec3f v);
+
 
     /* Mean Shift Tracking */
 
