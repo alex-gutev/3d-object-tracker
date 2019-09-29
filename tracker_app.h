@@ -69,12 +69,6 @@ class tracker_app {
     tracker track;
 
     /**
-     * Flag: true if the frame images with the tracking window
-     * superimposed on them, should be saved.
-     */
-    bool write_img = false;
-
-    /**
      * Current frame number.
      */
     size_t frame = 0;
