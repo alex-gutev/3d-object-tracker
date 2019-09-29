@@ -111,6 +111,18 @@ public:
     float track(cv::Point3f predicted, cv::Vec3f velocity);
 
 private:
+    /* Parameters */
+
+    /**
+     * Percentile to use for minimum depth value.
+     */
+    static constexpr float min_percentile = 0.05;
+    /**
+     * Percentile to use for maximum depth value.
+     */
+    static constexpr float max_percentile = 0.95;
+
+
     /* Model */
 
     /**

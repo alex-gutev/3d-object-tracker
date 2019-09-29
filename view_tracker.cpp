@@ -297,8 +297,8 @@ std::pair<size_t, float> view_tracker::is_occluded(const std::vector<object> &ob
 
         cv::Mat dimg = m_view.disparity_to_depth(m_view.depth());
 
-        float min = percentile(dimg, 0.5, mask);
-        float max = percentile(dimg, 0.95, mask);
+        float min = percentile(dimg, min_percentile, mask);
+        float max = percentile(dimg, max_percentile, mask);
 
         kf_range.predict();
         cv::Mat range = kf_range_correct(min, max);
@@ -333,8 +333,8 @@ void view_tracker::merge_objects(cv::Mat img, std::vector<object> &objects) {
             old->region |= obj.region;
 
             // Recompute depth statistics
-            old->min = percentile(img, 0.05, old->region);
-            old->max = percentile(img, 0.95, old->region);
+            old->min = percentile(img, min_percentile, old->region);
+            old->max = percentile(img, max_percentile, old->region);
             old->depth = percentile(img, 0.5, old->region);
 
             // Remove current object
@@ -386,8 +386,8 @@ std::vector<view_tracker::object> view_tracker::detect_objects(cv::Rect r) const
 
             auto median = percentile(dimg, 0.5, region);
 
-            auto min = percentile(dimg, 0.05, region);
-            auto max = percentile(dimg, 0.95, region);
+            auto min = percentile(dimg, min_percentile, region);
+            auto max = percentile(dimg, max_percentile, region);
 
             new_objects.emplace_back(object::type_unknown, min, max, median);
             new_objects.back().region = full_region;
@@ -536,8 +536,8 @@ size_t view_tracker::check_passed_occluder(cv::Point p, cv::Vec3f v) {
         if (cv::countNonZero(region)) {
             auto median = percentile(dimg, 0.5, region);
 
-            auto min = percentile(dimg, 0.05, region);
-            auto max = percentile(dimg, 0.95, region);
+            auto min = percentile(dimg, min_percentile, region);
+            auto max = percentile(dimg, max_percentile, region);
 
             objs.emplace_back(object::type_unknown, min, max, median);
             objs.back().region = region;
